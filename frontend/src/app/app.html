@@ -1,0 +1,44 @@
+<main class="main">
+  <h1>{{ title() }}</h1>
+
+  <section class="chat-window">
+    <div
+      *ngFor="let m of messages"
+      class="message"
+      [class.user]="m.from === 'user'"
+      [class.assistant]="m.from === 'assistant'"
+    >
+      <div class="from">
+        {{ m.from === 'user' ? 'You' : 'Assistant' }}
+      </div>
+      <div class="text">
+        {{ m.text }}
+      </div>
+
+      <div *ngIf="m.meta" class="meta">
+        <span>model: {{ m.meta?.model }}</span>
+        <span>mode: {{ m.meta?.mode }}</span>
+        <span *ngIf="m.meta?.latency_ms !== undefined">
+          latency: {{ m.meta?.latency_ms }}ms
+        </span>
+      </div>
+    </div>
+
+    <div *ngIf="loading" class="loading">送信中...</div>
+    <div *ngIf="error" class="error">{{ error }}</div>
+  </section>
+
+  <section class="input-area">
+    <label for="chat-input">メッセージ</label>
+    <textarea
+      id="chat-input"
+      rows="3"
+      [(ngModel)]="input"
+      placeholder="例：この契約書のリスク観点を洗い出して、など"
+    ></textarea>
+
+    <button (click)="send()" [disabled]="loading || !input.trim()">
+      送信
+    </button>
+  </section>
+</main>

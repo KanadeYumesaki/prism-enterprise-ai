@@ -1,0 +1,198 @@
+version: "0.1"
+policy_name: "COUNCIL_FOUR_GOV_KERNEL"
+updated_at: "2025-11-17T00:00:00+09:00"
+
+providers:
+  openai:
+    models:
+      gpt5_1_thinking:
+        role: "primary_heavy_reasoner"
+        cost_tier: "high"
+      gpt4_mini:
+        role: "fast_light"
+        cost_tier: "low"
+  google:
+    models:
+      gemini-2.5-pro:
+        role: "primary_heavy_reasoner"
+        cost_tier: "high"
+      gemini-2.5-flash:
+        role: "fast_light"
+        cost_tier: "low"
+  local:
+    models:
+      local_safe_model:
+        role: "fallback_sensitive"
+        cost_tier: "local"
+
+safety:
+  precedence:
+    - "legal_pii"
+    - "injection_guard"
+    - "safety"
+    - "host_escalation"
+    - "council_logic"
+    - "persona"
+
+  pii_shield:
+    echo_pii_back: false
+    direct_ids:
+      mask_strategy: "full_mask"
+      mask_token: "[REDACTED_DIRECT_ID]"
+      examples:
+        - "email"
+        - "phone_number"
+        - "credit_card"
+    quasi_ids:
+      mask_strategy: "head1_mask"
+      visible_chars: 1
+      mask_char: "*"
+      examples:
+        - "person_name"
+        - "partial_address"
+    code_names:
+      mask_strategy: "category_replace"
+      categories:
+        project: "[PROJECT_NAME]"
+        internal_code: "[INTERNAL_CODE]"
+        secret_term: "[SENSITIVE_TERM]"
+
+  blocked_categories:
+    - "self_harm"
+    - "violence"
+    - "terrorism"
+    - "child_exploitation"
+
+modes:
+  - id: "FAST"
+    description: "一般的な質問・軽いタスク向け。Web検索は原則禁止。"
+    safety_level: "normal"
+    allow_web_search: false
+    allow_code_execution: false
+    default_models:
+      - "openai:gpt4_mini"
+      - "google: gemini-2.5-flash"
+    triggers:
+      fallback: true
+
+  - id: "MEDIUM"
+    description: "比較・設計・レビュー・仕様・計画・実験など、少し重い推論向け。"
+    safety_level: "elevated"
+    allow_web_search: false
+    allow_code_execution: true
+    default_models:
+      - "openai:gpt5_1_thinking"
+      - "google:gemini-2.5-pro"
+    triggers:
+      keywords_any:
+        - "比較"
+        - "設計"
+        - "レビュー"
+        - "仕様"
+        - "計画"
+        - "実験"
+
+  - id: "HEAVY"
+    description: "医療・法務・金融・安全・プライバシー・規制などの高リスク領域。"
+    safety_level: "high"
+    require_web_search_for_fresh: true
+    allow_code_execution: true
+    default_models:
+      - "openai:gpt5_1_thinking"
+      - "google:gemini-2.5-pro"
+      - "local:local_safe_model"
+    triggers:
+      domains_any:
+        - "medical"
+        - "legal"
+        - "finance"
+        - "safety"
+        - "privacy"
+        - "regulation"
+      keywords_any:
+        - "個人情報"
+        - "PII"
+        - "規制"
+        - "コンプライアンス"
+        - "法改正"
+        - "契約"
+        - "SLO"
+        - "脆弱性"
+
+  - id: "FLASH"
+    description: "ニュース・株価・天候など、24h以内の速報性が重要な要約専用モード。"
+    safety_level: "strict"
+    require_web_search: true
+    response_style:
+      skeleton: ["Decision", "Why"]
+      disable_long_explanation: true
+      disable_advice: true
+    default_models:
+      - "openai:gpt5_1_thinking"
+      - "google:gemini-2.5-pro"
+    triggers:
+      domains_any:
+        - "news"
+        - "finance"
+        - "weather"
+      keywords_any:
+        - "速報"
+        - "最新ニュース"
+        - "株価"
+        - "今の天気"
+      recency_hours_max: 24
+
+escalation_rules:
+  - name: "pii_always_heavy"
+    if_flags:
+      pii_detected: true
+    escalate_to_min_mode: "HEAVY"
+
+  - name: "user_forced_web_search"
+    if_flags:
+      user_requested_web_search: true
+    min_mode: "HEAVY"
+
+  - name: "ambiguity_score_raise"
+    if_score_gte:
+      ambiguity_score: 1
+    step_up: 1
+
+routing:
+  rules:
+    - name: "heavy_sensitive_domains"
+      when_mode_in: ["HEAVY"]
+      primary_model: "google:gemini-2.5-pro"
+      backup_models:
+        - "openai:gpt5_1_thinking"
+        - "local:local_safe_model"
+
+    - name: "flash_news"
+      when_mode_in: ["FLASH"]
+      primary_model: "google:gemini-2.5-flash"
+      require_web_search: true
+
+    - name: "medium_default"
+      when_mode_in: ["MEDIUM"]
+      primary_model: "google:gemini-2.5-pro"
+
+    - name: "fast_default"
+      when_mode_in: ["FAST"]
+      primary_model: "google:gemini-2.5-flash"
+
+logging:
+  enabled: true
+  fields:
+    - "timestamp"
+    - "user_id"
+    - "mode"
+    - "selected_model"
+    - "policy_version"
+    - "pii_mask_applied"
+    - "safety_flags"
+    - "tools_used"
+    - "latency_ms"
+
+experimental:
+  triage_sigma:
+    enabled: false

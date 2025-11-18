@@ -1,0 +1,9 @@
+<div class="chat-window">
+  <div *ngFor="let m of history">
+    <div [class]="m.from">{{m.from}}: {{m.text}}</div>
+    <div *ngIf="m.meta">Mode: {{m.meta.mode}} | Model: {{m.meta.model}} | {{m.meta.latency_ms}}ms</div>
+  </div>
+
+  <input id="chat-input" placeholder="Type a message..." />
+  <button id="send-btn">Send</button>
+</div>
