@@ -1,44 +1,110 @@
-<main class="main">
-  <h1>{{ title() }}</h1>
+<mat-sidenav-container class="sidenav-container">
+  <mat-sidenav #drawer mode="side" opened class="sidenav">
+    <mat-toolbar>Menu</mat-toolbar>
 
-  <section class="chat-window">
-    <div
-      *ngFor="let m of messages"
-      class="message"
-      [class.user]="m.from === 'user'"
-      [class.assistant]="m.from === 'assistant'"
-    >
-      <div class="from">
-        {{ m.from === 'user' ? 'You' : 'Assistant' }}
-      </div>
-      <div class="text">
-        {{ m.text }}
+    <div class="sidenav-content">
+      <button mat-stroked-button class="new-chat-btn" (click)="clearChat()">
+        <mat-icon>add</mat-icon>
+        New Chat
+      </button>
+
+      <div class="policy-info" *ngIf="policyVersion">
+        <small>Policy: v{{ policyVersion }}</small>
       </div>
 
-      <div *ngIf="m.meta" class="meta">
-        <span>model: {{ m.meta?.model }}</span>
-        <span>mode: {{ m.meta?.mode }}</span>
-        <span *ngIf="m.meta?.latency_ms !== undefined">
-          latency: {{ m.meta?.latency_ms }}ms
-        </span>
-      </div>
+      <mat-divider></mat-divider>
+
+      <h3 mat-subheader>Audit Logs</h3>
+      <mat-nav-list>
+        <mat-list-item *ngFor="let log of logs" (click)="restoreChat(log)" style="cursor: pointer;">
+          <mat-icon matListItemIcon>history</mat-icon>
+          <div matListItemTitle>{{ log.timestamp | date:'MM/dd HH:mm' }}</div>
+          <div matListItemLine>{{ log.mode }} - {{ log.model }}</div>
+        </mat-list-item>
+      </mat-nav-list>
     </div>
+  </mat-sidenav>
 
-    <div *ngIf="loading" class="loading">送信中...</div>
-    <div *ngIf="error" class="error">{{ error }}</div>
-  </section>
+  <mat-sidenav-content>
+    <mat-toolbar color="primary">
+      <mat-icon style="margin-right: 8px;">change_history</mat-icon>
+      <span style="font-weight: bold; font-size: 1.2rem;">
+        {{ title() }}
+      </span>
+      <span style="margin-left: 12px; font-size: 0.8rem; opacity: 0.8;">
+        Intelligent Governance Hub
+      </span>
+      <span class="spacer" style="flex: 1 1 auto;"></span>
+      <button mat-icon-button>
+        <mat-icon>account_circle</mat-icon>
+      </button>
+    </mat-toolbar>
 
-  <section class="input-area">
-    <label for="chat-input">メッセージ</label>
-    <textarea
-      id="chat-input"
-      rows="3"
-      [(ngModel)]="input"
-      placeholder="例：この契約書のリスク観点を洗い出して、など"
-    ></textarea>
+    <main class="main-content">
+      <div class="chat-window">
 
-    <button (click)="send()" [disabled]="loading || !input.trim()">
-      送信
-    </button>
-  </section>
-</main>
+        <mat-card *ngFor="let m of messages" class="message-card" [class.user-card]="m.from === 'user'"
+          [class.assistant-card]="m.from === 'assistant'">
+          <mat-card-header>
+            <div mat-card-avatar>
+              <mat-icon>{{ m.from === 'user' ? 'person' : 'smart_toy' }}</mat-icon>
+            </div>
+            <mat-card-title>{{ m.from === 'user' ? 'You' : 'Prism' }}</mat-card-title>
+            <mat-card-subtitle *ngIf="m.meta">
+              <mat-chip-set aria-label="Governance Info">
+                <mat-chip class="meta-chip" *ngIf="m.meta.model">
+                  {{ m.meta.model }}
+                </mat-chip>
+                <mat-chip class="meta-chip" *ngIf="m.meta.mode"
+                  [style.background-color]="m.meta.mode === 'HEAVY' ? '#ffcdd2' : '#e1f5fe'">
+                  {{ m.meta.mode }}
+                </mat-chip>
+                <mat-chip class="meta-chip" *ngIf="m.meta.latency_ms">
+                  {{ m.meta.latency_ms }}ms
+                </mat-chip>
+              </mat-chip-set>
+            </mat-card-subtitle>
+          </mat-card-header>
+
+          <mat-card-content>
+            <p *ngIf="m.from === 'user'" style="white-space: pre-wrap;">{{ m.text }}</p>
+            <div *ngIf="m.from === 'assistant'">
+              <markdown [data]="m.text"></markdown>
+            </div>
+          </mat-card-content>
+        </mat-card>
+
+        <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
+
+        <p *ngIf="error" class="error-text">{{ error }}</p>
+      </div>
+
+      <section class="input-area">
+        <mat-chip-set *ngIf="selectedFiles.length > 0" class="file-chips">
+          <mat-chip *ngFor="let file of selectedFiles" (removed)="removeFile(file)">
+            {{ file.name }}
+            <button matChipRemove>
+              <mat-icon>cancel</mat-icon>
+            </button>
+          </mat-chip>
+        </mat-chip-set>
+
+        <div class="input-row">
+          <button mat-icon-button (click)="fileInput.click()" type="button">
+            <mat-icon>attach_file</mat-icon>
+          </button>
+          <input #fileInput type="file" (change)="onFileSelected($event)" multiple style="display: none;">
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>メッセージを入力...</mat-label>
+            <textarea matInput [(ngModel)]="input" rows="1" cdkTextareaAutosize cdkAutosizeMinRows="1"
+              cdkAutosizeMaxRows="5" (keydown.control.enter)="send()"></textarea>
+            <button mat-icon-button matSuffix (click)="send()" [disabled]="loading || !input.trim()">
+              <mat-icon>send</mat-icon>
+            </button>
+          </mat-form-field>
+        </div>
+      </section>
+    </main>
+  </mat-sidenav-content>
+</mat-sidenav-container>

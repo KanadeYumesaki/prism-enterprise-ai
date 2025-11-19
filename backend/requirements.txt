@@ -6,3 +6,5 @@ pyyaml
 sqlmodel
 python-dotenv
 google-genai
+pypdf
+python-multipart
