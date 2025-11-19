@@ -37,18 +37,18 @@ Frontend (Angular) と Backend (FastAPI) によるモダンな疎結合アーキ
 
 ```mermaid
 graph TD
-    User[User / Browser] -->|HTTPS / Multipart| FE["Angular Frontend (Prism UI)"]
-    FE -->|REST API / FormData| BE[FastAPI Backend]
+    User["User / Browser"] -->|"HTTPS / Multipart"| FE["Angular Frontend (Prism UI)"]
+    FE -->|"REST API / FormData"| BE["FastAPI Backend"]
     
     subgraph "Governance Kernel (Backend)"
-        BE --> Parser[File Parser (PDF/CSV)]
-        BE --> Router[Mode Router]
-        BE --> PII[PII Shield]
-        Router -->|Routing| Model[LLM Orchestrator]
+        BE --> Parser["File Parser (PDF/CSV)"]
+        BE --> Router["Mode Router"]
+        BE --> PII["PII Shield"]
+        Router -->|"Routing"| Model["LLM Orchestrator"]
     end
     
-    Model -->|API Call| Google[Google Gemini 1.5 Pro/Flash]
-    BE -->|Audit Log| DB[(SQLite / Audit DB)]
+    Model -->|"API Call"| Google["Google Gemini 1.5 Pro/Flash"]
+    BE -->|"Audit Log"| DB[("SQLite / Audit DB")]
 ````
 
 ### Tech Stack
