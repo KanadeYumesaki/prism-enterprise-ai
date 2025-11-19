@@ -1,93 +1,271 @@
-# Governance_Kernel
+# マルチ LLM Governance Kernel
 
+マルチ LLM を「ポリシー駆動」で安全に使うための実験用プラットフォームです。
+バックエンドは **Python / FastAPI**、フロントエンドは **Angular** で実装されており、
 
+* **Governance Kernel**：
 
-## Getting started
+  * ユーザーの入力を解析して「モード（FAST / MEDIUM / HEAVY / FLASH）」を判定
+  * ポリシーに基づいて LLM モデルを選択（例：Gemini 2.5 Flash / Pro）
+  * すべてのリクエストを SQLite にログ保存
+* **Policy Compiler**：
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+  * YAML で記述した独自 DSL（Policy DSL）から System Prompt を生成
+  * ドメイン別のガバナンスルールを一元管理
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+現在は主に **Gemini 2.5 (Flash / Pro)** を使ったマルチモード・ルーティングが動作しており、
+将来的には GPT / ローカル LLM / AWS Bedrock なども追加可能な構造になっています。
 
-## Add your files
+---
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+## アーキテクチャ概要
 
+```text
+┌────────────┐        ┌────────────────────┐       ┌────────────────────────┐
+│ Angular UI │──HTTP→│ FastAPI Backend     │──→   │ LLM Providers           │
+│ (frontend) │      │  - /chat             │      │  - Google Gemini 2.5    │
+└────────────┘      │  - /policies         │      │  - OpenAI (将来/実験)   │
+                    │  - /logs             │      │  - Local / others (予定)│
+                    └──────────┬───────────┘       └────────────────────────┘
+                               │
+                               │ Policy DSL (policies.yaml)
+                               │
+                     ┌─────────▼─────────┐
+                     │ Governance Kernel  │
+                     │  - モード判定      │
+                     │  - モデル選択      │
+                     │  - PII/ドメイン検知│
+                     └─────────▲─────────┘
+                               │
+                     ┌─────────┴─────────┐
+                     │ Policy Compiler    │
+                     │  - System Prompt   │
+                     │    自動生成        │
+                     └────────────────────┘
 ```
-cd existing_repo
-git remote add origin https://gitlab.com/masahiro_suzuki/governance_kernel.git
-git branch -M main
-git push -uf origin main
+
+---
+
+## 主な機能
+
+### バックエンド（`backend/`）
+
+* `/chat`
+
+  * リクエスト：`{ user_id, message, metadata? }`
+  * 処理フロー：
+
+    1. `governance_kernel.py` でモード判定（FAST / HEAVY など）
+    2. `policies.yaml` の `routing` ルールからモデルを選択
+       （例：FAST → `google:gemini-2.5-flash`、HEAVY → `google:gemini-2.5-pro`）
+    3. `policy_compiler.py` で System Prompt を構築
+    4. `providers.py` 経由で LLM を呼び出し
+    5. 結果を `logging_db.py` で SQLite に保存
+  * レスポンス：
+
+    ```json
+    {
+      "reply": "...",
+      "mode": "FAST",
+      "model": "google:gemini-2.5-flash",
+      "policy_version": "0.1",
+      "safety_flags": [],
+      "tools_used": [],
+      "latency_ms": 1234
+    }
+    ```
+
+* `/policies`
+
+  * 現在適用中の `policies.yaml` を返す（ポリシー可視化・デバッグ用）
+
+* `/logs`
+
+  * SQLite (`governance_logs.db`) に溜めたガバナンスログを返却
+  * 後続で Angular のログビューアと接続予定
+
+### フロントエンド（`frontend/`）
+
+* Angular 20 ベースの SPA
+* 現状のメイン画面：
+
+  * **チャット UI**
+
+    * メッセージ入力欄＋「送信」ボタン
+    * 会話履歴を表示
+    * 各 AI 応答の下に `model / mode / latency_ms` をバッジ表示
+
+      * 例：`モデル: google:gemini-2.5-pro / モード: HEAVY / レイテンシ: xxxx ms`
+* `frontend_skeleton_backup/` には今後追加予定のコンポーネントのスケルトンを保存
+
+  * `policy-viewer`（ポリシー一覧 UI）
+  * `log-viewer`（ログ一覧 UI） など
+
+---
+
+## 動作環境
+
+* Python 3.11 付近を想定
+* Node.js 20 系以上
+* Angular CLI 20.x
+* OS: Windows 11 で動作確認（他 OS でも動く想定）
+
+---
+
+## セットアップ手順
+
+### 1. リポジトリのクローン
+
+```bash
+git clone https://gitlab.com/masahiro_suzuki/governance_kernel.git
+cd governance_kernel
 ```
 
-## Integrate with your tools
+### 2. バックエンド（FastAPI）セットアップ
 
-- [ ] [Set up project integrations](https://gitlab.com/masahiro_suzuki/governance_kernel/-/settings/integrations)
+```bash
+cd backend
 
-## Collaborate with your team
+# 仮想環境作成（任意のパスでOK）
+python -m venv .venv
+# Windows PowerShell
+.\.venv\Scripts\Activate.ps1
+# Git Bash / WSL の場合
+# source .venv/Scripts/activate or .venv/bin/activate
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+pip install --upgrade pip
+pip install -r requirements.txt
+```
 
-## Test and Deploy
+#### `.env` の設定
 
-Use the built-in continuous integration in GitLab.
+`backend/.env.example` をコピーして `.env` を作成し、API キーを設定します。
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+```bash
+cp .env.example .env
+```
 
-***
+`.env` の例：
 
-# Editing this README
+```env
+GEMINI_API_KEY=your_google_gemini_api_key_here
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+# 将来 OpenAI などを繋ぐとき
+# OPENAI_API_KEY=sk-xxxx
+```
 
-## Suggestions for a good README
+> `.env` と `.venv` は `.gitignore` に入れてあり、Git にコミットされないようになっています。
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+#### バックエンド起動
 
-## Name
-Choose a self-explaining name for your project.
+```bash
+cd backend
+uvicorn main:app --reload --port 8000
+```
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+* Swagger UI: [http://localhost:8000/docs](http://localhost:8000/docs)
+* `POST /chat` から単体で動作確認もできます。
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+---
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+### 3. フロントエンド（Angular）セットアップ
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+別ターミナルを開いて：
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+```bash
+cd governance_kernel/frontend
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+npm install
+ng serve --open
+```
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+* ブラウザで自動的に `http://localhost:4200` が開きます。
+* 画面からメッセージを送ると、FastAPI の `/chat` → Gemini までの一連の流れが動作します。
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+---
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+## ポリシー DSL（`policies.yaml`）について
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+`backend/policies.yaml` に、ガバナンスルールを YAML ベースの DSL で定義しています。
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+主なセクション：
 
-## License
-For open source projects, say how it is licensed.
+* `modes`
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+  * FAST / MEDIUM / HEAVY / FLASH などのモード定義
+  * どのようなときにどのモードを使うかの抽象ルール
+
+* `routing`
+
+  * `when_mode_in` に応じて `primary_model` / `backup_models` を指定
+  * 例：
+
+    ```yaml
+    - name: "heavy_sensitive_domains"
+      when_mode_in: ["HEAVY"]
+      primary_model: "google:gemini-2.5-pro"
+      backup_models:
+        - "openai:gpt5_1_thinking"  # 将来用スロット
+    ```
+
+* `safety`
+
+  * PII 検知やドメインごとの禁止事項など（v0.1 では簡易）
+
+この DSL を `policy_compiler.py` が解釈し、LLM に渡す System Prompt を自動生成します。
+
+---
+
+## ログ・監査
+
+* `backend/logging_db.py` で簡易な SQLite ログを管理
+
+  * テーブルには
+
+    * `timestamp`
+    * `user_id`
+    * `mode`
+    * `model`
+    * `latency_ms`
+    * `input_text` / `output_text`（必要に応じて）
+  * 将来的に
+
+    * ドメイン別集計
+    * モード別利用率
+    * コスト推定
+      などをダッシュボード化する想定
+
+* Angular 側では今後、`log-viewer` コンポーネントから `/logs` API を叩いてテーブル表示する予定
+
+---
+
+## 想定ユースケース
+
+* 社内向け「AI ポータル」のベース
+
+  * 1つの UI から複数 LLM（Gemini / GPT / ローカル）を使い分けたい
+  * 利用ログ・モード・モデルを監査したい
+* ガバナンスルールの A/B テスト
+
+  * `policies.yaml` を書き換えて、どのルーティングが安定するか検証
+* LLM ガバナンス / 安全性に関する PoC / 論文・ブログ用サンプル
+
+---
+
+## ロードマップ / TODO
+
+* [ ] Angular ログビューア (`/logs` コンポーネント)
+* [ ] ポリシービューア（`/policies` を UI で可視化）
+* [ ] OpenAI / 他プロバイダを providers.py に正式対応
+* [ ] PII / ドメイン分類を本格的なモデルに差し替え
+* [ ] 部署・ユーザーごとの利用統計ダッシュボード
+* [ ] Docker 化・クラウド環境へのデプロイ手順
+
+---
+
+## ライセンス / 注意事項
+
+* 現時点では個人開発・実験用途を前提としたリポジトリです。
+* 商用利用や社内展開を行う場合は、利用する LLM プロバイダ（Google, OpenAI, AWS 等）の
+  利用規約・料金・データ取り扱いポリシーを必ず確認してください。
+* `.env` や API キーは決して Git にコミットしないでください。
