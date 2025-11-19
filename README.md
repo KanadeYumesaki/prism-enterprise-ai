@@ -37,7 +37,7 @@ Frontend (Angular) と Backend (FastAPI) によるモダンな疎結合アーキ
 
 ```mermaid
 graph TD
-    User[User / Browser] -->|HTTPS / Multipart| FE[Angular Frontend (Prism UI)]
+    User[User / Browser] -->|HTTPS / Multipart| FE["Angular Frontend (Prism UI)"]
     FE -->|REST API / FormData| BE[FastAPI Backend]
     
     subgraph "Governance Kernel (Backend)"
