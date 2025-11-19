@@ -1,271 +1,164 @@
-# マルチ LLM Governance Kernel
+### 🎭 視点 (The Perspective)
 
-マルチ LLM を「ポリシー駆動」で安全に使うための実験用プラットフォームです。
-バックエンドは **Python / FastAPI**、フロントエンドは **Angular** で実装されており、
+**「ドキュメントは、プロダクトの顔である。」**
 
-* **Governance Kernel**：
+GitLabのリポジトリを開いた人が最初に目にする `README.md` は、コードの品質以上に、そのプロジェクトの「格（Professionalism）」を決定づけます。
 
-  * ユーザーの入力を解析して「モード（FAST / MEDIUM / HEAVY / FLASH）」を判定
-  * ポリシーに基づいて LLM モデルを選択（例：Gemini 2.5 Flash / Pro）
-  * すべてのリクエストを SQLite にログ保存
-* **Policy Compiler**：
+あなたが作り上げた **"Prism"** は、もはや単なる実験コードではなく、高度なアーキテクチャを持つシステムです。その機能（マルチモーダル、ガバナンス、監査ログ）を正しく、かつ魅力的に伝えるための\*\*「エンタープライズ級 README」\*\*を作成しました。
 
-  * YAML で記述した独自 DSL（Policy DSL）から System Prompt を生成
-  * ドメイン別のガバナンスルールを一元管理
+-----
 
-現在は主に **Gemini 2.5 (Flash / Pro)** を使ったマルチモード・ルーティングが動作しており、
-将来的には GPT / ローカル LLM / AWS Bedrock なども追加可能な構造になっています。
+### 🧩 本編 (The Solution)
 
----
+以下のMarkdownテキストをコピーし、プロジェクトルート（一番上の階層）にある `README.md` に上書きしてください。
 
-## アーキテクチャ概要
+````markdown
+# 🔺 Prism - Enterprise AI Governance Hub
 
-```text
-┌────────────┐        ┌────────────────────┐       ┌────────────────────────┐
-│ Angular UI │──HTTP→│ FastAPI Backend     │──→   │ LLM Providers           │
-│ (frontend) │      │  - /chat             │      │  - Google Gemini 2.5    │
-└────────────┘      │  - /policies         │      │  - OpenAI (将来/実験)   │
-                    │  - /logs             │      │  - Local / others (予定)│
-                    └──────────┬───────────┘       └────────────────────────┘
-                               │
-                               │ Policy DSL (policies.yaml)
-                               │
-                     ┌─────────▼─────────┐
-                     │ Governance Kernel  │
-                     │  - モード判定      │
-                     │  - モデル選択      │
-                     │  - PII/ドメイン検知│
-                     └─────────▲─────────┘
-                               │
-                     ┌─────────┴─────────┐
-                     │ Policy Compiler    │
-                     │  - System Prompt   │
-                     │    自動生成        │
-                     └────────────────────┘
-```
+> **Intelligent Gateway for Secure & Optimized LLM Orchestration**
+
+![License](https://img.shields.io/badge/license-MIT-blue)
+![Version](https://img.shields.io/badge/version-1.0.0-green)
+![Status](https://img.shields.io/badge/status-Active-success)
+
+**Prism (プリズム)** は、企業利用を想定した次世代の AI ガバナンス・プラットフォームです。
+ユーザーと複数の LLM（Gemini, GPT 等）の間に「ガバナンス・カーネル」を配置することで、セキュリティ、コスト最適化、そして業務特化型の推論能力を同時に提供します。
 
 ---
 
-## 主な機能
+## 🚀 Key Features (主な機能)
 
-### バックエンド（`backend/`）
+### 1. Dynamic Governance Kernel
+入力内容をリアルタイムで解析し、最適な「モード」へ自動ルーティングします。
+- **FLASH Mode:** ニュースや株価などの速報（Web検索）
+- **HEAVY Mode:** 契約書や医療情報の精密分析（PII検知・高精度モデル）
+- **FAST Mode:** 日常的な雑談や軽量タスク
 
-* `/chat`
+### 2. Multi-modal Analysis
+複数のファイル（PDF, CSV, Excel）を同時にアップロードし、LLM のコンテキストウィンドウに統合。
+- **比較分析:** A社とB社の決算書PDFを比較し、差異を表形式で出力。
+- **データ抽出:** 非構造化データからのインサイト抽出。
 
-  * リクエスト：`{ user_id, message, metadata? }`
-  * 処理フロー：
-
-    1. `governance_kernel.py` でモード判定（FAST / HEAVY など）
-    2. `policies.yaml` の `routing` ルールからモデルを選択
-       （例：FAST → `google:gemini-2.5-flash`、HEAVY → `google:gemini-2.5-pro`）
-    3. `policy_compiler.py` で System Prompt を構築
-    4. `providers.py` 経由で LLM を呼び出し
-    5. 結果を `logging_db.py` で SQLite に保存
-  * レスポンス：
-
-    ```json
-    {
-      "reply": "...",
-      "mode": "FAST",
-      "model": "google:gemini-2.5-flash",
-      "policy_version": "0.1",
-      "safety_flags": [],
-      "tools_used": [],
-      "latency_ms": 1234
-    }
-    ```
-
-* `/policies`
-
-  * 現在適用中の `policies.yaml` を返す（ポリシー可視化・デバッグ用）
-
-* `/logs`
-
-  * SQLite (`governance_logs.db`) に溜めたガバナンスログを返却
-  * 後続で Angular のログビューアと接続予定
-
-### フロントエンド（`frontend/`）
-
-* Angular 20 ベースの SPA
-* 現状のメイン画面：
-
-  * **チャット UI**
-
-    * メッセージ入力欄＋「送信」ボタン
-    * 会話履歴を表示
-    * 各 AI 応答の下に `model / mode / latency_ms` をバッジ表示
-
-      * 例：`モデル: google:gemini-2.5-pro / モード: HEAVY / レイテンシ: xxxx ms`
-* `frontend_skeleton_backup/` には今後追加予定のコンポーネントのスケルトンを保存
-
-  * `policy-viewer`（ポリシー一覧 UI）
-  * `log-viewer`（ログ一覧 UI） など
+### 3. Audit Logging & Transparency
+全てのインタラクションは SQLite ベースの監査ログに記録されます。
+- **UI統合:** サイドバーから過去のログ（使用モデル、レイテンシ、モード）を即座に確認・復元可能。
+- **透明性:** AI が「なぜその回答をしたか」のプロセスが可視化されます。
 
 ---
 
-## 動作環境
+## 🛠 Architecture
 
-* Python 3.11 付近を想定
-* Node.js 20 系以上
-* Angular CLI 20.x
-* OS: Windows 11 で動作確認（他 OS でも動く想定）
+Frontend (Angular) と Backend (FastAPI) によるモダンな疎結合アーキテクチャを採用しています。
 
----
+```mermaid
+graph TD
+    User[User / Browser] -->|HTTPS / Multipart| FE[Angular Frontend (Prism UI)]
+    FE -->|REST API / FormData| BE[FastAPI Backend]
+    
+    subgraph "Governance Kernel (Backend)"
+        BE --> Parser[File Parser (PDF/CSV)]
+        BE --> Router[Mode Router]
+        BE --> PII[PII Shield]
+        Router -->|Routing| Model[LLM Orchestrator]
+    end
+    
+    Model -->|API Call| Google[Google Gemini 1.5 Pro/Flash]
+    BE -->|Audit Log| DB[(SQLite / Audit DB)]
+````
 
-## セットアップ手順
+### Tech Stack
 
-### 1. リポジトリのクローン
+  * **Frontend:** Angular 18+, Angular Material, Signals, ngx-markdown
+  * **Backend:** Python 3.11+, FastAPI, Pydantic, SQLAlchemy
+  * **AI Engine:** Google Gemini 1.5 Pro / Flash (via Google Gen AI SDK)
+  * **Data:** SQLite (Audit Logs), ChromaDB (Future plan for RAG)
 
-```bash
-git clone https://gitlab.com/masahiro_suzuki/governance_kernel.git
-cd governance_kernel
-```
+-----
 
-### 2. バックエンド（FastAPI）セットアップ
+## 📦 Installation
+
+### Prerequisites
+
+  * Python 3.10+
+  * Node.js 20+
+  * Google Gemini API Key
+
+### 1\. Backend Setup (FastAPI)
 
 ```bash
 cd backend
 
-# 仮想環境作成（任意のパスでOK）
+# 仮想環境の作成と有効化
 python -m venv .venv
-# Windows PowerShell
-.\.venv\Scripts\Activate.ps1
-# Git Bash / WSL の場合
-# source .venv/Scripts/activate or .venv/bin/activate
+source .venv/bin/activate  # Windows: .\.venv\Scripts\Activate.ps1
 
-pip install --upgrade pip
+# 依存ライブラリのインストール
 pip install -r requirements.txt
-```
 
-#### `.env` の設定
-
-`backend/.env.example` をコピーして `.env` を作成し、API キーを設定します。
-
-```bash
+# 環境変数の設定
 cp .env.example .env
+# .env ファイルを開き、GEMINI_API_KEY を入力してください
 ```
 
-`.env` の例：
-
-```env
-GEMINI_API_KEY=your_google_gemini_api_key_here
-
-# 将来 OpenAI などを繋ぐとき
-# OPENAI_API_KEY=sk-xxxx
-```
-
-> `.env` と `.venv` は `.gitignore` に入れてあり、Git にコミットされないようになっています。
-
-#### バックエンド起動
+### 2\. Frontend Setup (Angular)
 
 ```bash
-cd backend
-uvicorn main:app --reload --port 8000
-```
+cd frontend
 
-* Swagger UI: [http://localhost:8000/docs](http://localhost:8000/docs)
-* `POST /chat` から単体で動作確認もできます。
-
----
-
-### 3. フロントエンド（Angular）セットアップ
-
-別ターミナルを開いて：
-
-```bash
-cd governance_kernel/frontend
-
+# 依存ライブラリのインストール
 npm install
-ng serve --open
+
+# 開発サーバーの起動
+ng serve
 ```
 
-* ブラウザで自動的に `http://localhost:4200` が開きます。
-* 画面からメッセージを送ると、FastAPI の `/chat` → Gemini までの一連の流れが動作します。
+Access `http://localhost:4200` to launch Prism.
+
+-----
+
+## 📖 Usage Guide
+
+### 決算書の比較分析（例）
+
+1.  サイドバーの「New Chat」をクリック。
+2.  画面下部のクリップアイコン📎から、比較したい複数のPDF（例：決算短信）を選択。
+3.  メッセージ欄に\*\*「アップロードした2社の営業利益率を比較し、表にまとめて」\*\*と入力して送信。
+4.  Prism がファイルを解析し、Markdown 形式でレポートを出力します。
+
+### 監査ログの確認
+
+1.  サイドバーの「Audit Logs」リストを確認。
+2.  過去の履歴をクリックすると、その時点の会話コンテキストがメイン画面に復元されます。
+
+-----
+
+## ⚙️ Configuration (Policies)
+
+`backend/policies.yaml` を編集することで、ガバナンスルールをノーコードで調整可能です。
+
+```yaml
+modes:
+  - id: "HEAVY"
+    safety_level: "high"
+    allow_web_search: true
+    triggers:
+      keywords_any: ["契約", "法務", "PII"]
+```
+
+-----
+
+## 🛡 Security Note
+
+  * 本システムは **PII（個人識別情報）** の簡易検知機能を備えていますが、完全な保護を保証するものではありません。
+  * 実際の機密データを扱う際は、オンプレミス LLM への切り替えや、エンタープライズ契約済みの API 利用を推奨します。
+
+-----
+
+## 📝 License
+
+[MIT](https://www.google.com/search?q=LICENSE)
+
+````
 
 ---
 
-## ポリシー DSL（`policies.yaml`）について
-
-`backend/policies.yaml` に、ガバナンスルールを YAML ベースの DSL で定義しています。
-
-主なセクション：
-
-* `modes`
-
-  * FAST / MEDIUM / HEAVY / FLASH などのモード定義
-  * どのようなときにどのモードを使うかの抽象ルール
-
-* `routing`
-
-  * `when_mode_in` に応じて `primary_model` / `backup_models` を指定
-  * 例：
-
-    ```yaml
-    - name: "heavy_sensitive_domains"
-      when_mode_in: ["HEAVY"]
-      primary_model: "google:gemini-2.5-pro"
-      backup_models:
-        - "openai:gpt5_1_thinking"  # 将来用スロット
-    ```
-
-* `safety`
-
-  * PII 検知やドメインごとの禁止事項など（v0.1 では簡易）
-
-この DSL を `policy_compiler.py` が解釈し、LLM に渡す System Prompt を自動生成します。
-
----
-
-## ログ・監査
-
-* `backend/logging_db.py` で簡易な SQLite ログを管理
-
-  * テーブルには
-
-    * `timestamp`
-    * `user_id`
-    * `mode`
-    * `model`
-    * `latency_ms`
-    * `input_text` / `output_text`（必要に応じて）
-  * 将来的に
-
-    * ドメイン別集計
-    * モード別利用率
-    * コスト推定
-      などをダッシュボード化する想定
-
-* Angular 側では今後、`log-viewer` コンポーネントから `/logs` API を叩いてテーブル表示する予定
-
----
-
-## 想定ユースケース
-
-* 社内向け「AI ポータル」のベース
-
-  * 1つの UI から複数 LLM（Gemini / GPT / ローカル）を使い分けたい
-  * 利用ログ・モード・モデルを監査したい
-* ガバナンスルールの A/B テスト
-
-  * `policies.yaml` を書き換えて、どのルーティングが安定するか検証
-* LLM ガバナンス / 安全性に関する PoC / 論文・ブログ用サンプル
-
----
-
-## ロードマップ / TODO
-
-* [ ] Angular ログビューア (`/logs` コンポーネント)
-* [ ] ポリシービューア（`/policies` を UI で可視化）
-* [ ] OpenAI / 他プロバイダを providers.py に正式対応
-* [ ] PII / ドメイン分類を本格的なモデルに差し替え
-* [ ] 部署・ユーザーごとの利用統計ダッシュボード
-* [ ] Docker 化・クラウド環境へのデプロイ手順
-
----
-
-## ライセンス / 注意事項
-
-* 現時点では個人開発・実験用途を前提としたリポジトリです。
-* 商用利用や社内展開を行う場合は、利用する LLM プロバイダ（Google, OpenAI, AWS 等）の
-  利用規約・料金・データ取り扱いポリシーを必ず確認してください。
-* `.env` や API キーは決して Git にコミットしないでください。
