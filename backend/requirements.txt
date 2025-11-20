@@ -1,10 +1,12 @@
-fastapi
+fastapi>=0.100.0
 uvicorn[standard]
 httpx
-pydantic
 pyyaml
-sqlmodel
+sqlmodel>=0.0.20
 python-dotenv
 google-genai
-pypdf
 python-multipart
+chromadb>=1.0.0      # ★ chromadbは新しめに寄せる
+rank_bm25
+pydantic>=2.0,<3.0   # ★ ここを変更（1系→2系へ）
+pydantic-settings>=2.0,<3.0  # ★ BaseSettings 用（念のため追加）

@@ -6,6 +6,7 @@ __pycache__/
 venv/
 .venv/
 governance_logs.db
+backend/chroma_db/
 
 # Node / Angular
 node_modules/

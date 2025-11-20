@@ -17,6 +17,7 @@ import { MatListModule } from '@angular/material/list';
 import { MatIconModule } from '@angular/material/icon';
 import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
+import { MatTableModule } from '@angular/material/table';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
@@ -36,7 +37,9 @@ import { MarkdownComponent } from 'ngx-markdown';
     MatIconModule,
     MatButtonModule,
     MatCardModule,
+    MatCardModule,
     MatChipsModule,
+    MatTableModule,
     MatFormFieldModule,
     MatInputModule,
     MatProgressBarModule,
@@ -54,6 +57,9 @@ export class App implements OnInit {
   error: string | null = null;
   messages: ChatMessage[] = [];
   selectedFiles: File[] = [];
+  viewMode: 'chat' | 'knowledge' = 'chat';
+  knowledgeDocs: any[] = [];
+  displayedColumns: string[] = ['filename', 'id'];
 
   removeFile(fileToRemove: File): void {
     this.selectedFiles = this.selectedFiles.filter(file => file !== fileToRemove);
@@ -102,12 +108,64 @@ export class App implements OnInit {
     const element = event.currentTarget as HTMLInputElement;
     const fileList: FileList | null = element.files;
     if (fileList && fileList.length > 0) {
-      // [LEARN] FileList は配列のようなオブジェクトですが、配列そのものではありません。
-      // Array.from() を使って本物の配列に変換することで、forEach や map などの配列メソッドが使えるようになります。
-      this.selectedFiles = Array.from(fileList);
-    } else {
-      this.selectedFiles = [];
+      const newFiles = Array.from(fileList);
+
+      // 重複排除と上限チェック
+      newFiles.forEach(file => {
+        if (this.selectedFiles.length >= 10) return;
+        if (!this.selectedFiles.some(f => f.name === file.name)) {
+          this.selectedFiles.push(file);
+        }
+      });
     }
+    // [IMPORTANT] 同じファイルを再選択できるように値をクリア
+    element.value = '';
+  }
+
+  setViewMode(mode: 'chat' | 'knowledge') {
+    this.viewMode = mode;
+    if (mode === 'knowledge') {
+      this.fetchKnowledgeBase();
+    }
+  }
+
+  fetchKnowledgeBase() {
+    this.chat.getKnowledgeList().subscribe({
+      next: (data) => {
+        this.knowledgeDocs = data;
+      },
+      error: (e) => console.error('Failed to fetch knowledge base', e)
+    });
+  }
+
+  uploadToKnowledgeBase() {
+    if (this.selectedFiles.length === 0) return;
+
+    this.loading = true;
+    let completed = 0;
+    const total = this.selectedFiles.length;
+
+    this.selectedFiles.forEach(file => {
+      this.chat.ingestFile(file).subscribe({
+        next: () => {
+          completed++;
+          if (completed === total) {
+            this.loading = false;
+            this.selectedFiles = [];
+            this.fetchKnowledgeBase();
+            alert('All files uploaded successfully!');
+          }
+        },
+        error: (e) => {
+          console.error(e);
+          completed++;
+          if (completed === total) {
+            this.loading = false;
+            this.fetchKnowledgeBase(); // Refresh anyway
+          }
+        }
+      });
+    });
   }
 
   send(): void {

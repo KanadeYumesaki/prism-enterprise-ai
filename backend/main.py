@@ -11,6 +11,11 @@ from policy_compiler import build_system_prompt
 from providers import call_llm
 from models import ChatRequest, ChatResponse
 from file_parser import extract_text_from_file
+from rag_kernel import HybridRetriever
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 BASE_DIR = Path(__file__).parent
@@ -29,9 +34,17 @@ app.add_middleware(
 @app.on_event("startup")
 def startup_event():
     # Load policies
-    global POLICIES
+    global POLICIES, RAG_ENGINE
     POLICIES = load_policies(BASE_DIR / "policies.yaml")
     init_db()
+    
+    # Initialize RAG Engine
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        print("WARNING: GEMINI_API_KEY not found. RAG will not work.")
+        RAG_ENGINE = None
+    else:
+        RAG_ENGINE = HybridRetriever(api_key)
 
 
 # [OLD CODE]
@@ -113,6 +126,14 @@ async def chat_endpoint(
     model = select_model(mode, POLICIES)
     system_prompt = build_system_prompt(mode, POLICIES)
 
+    # [NEW CODE] RAG Context Injection
+    if RAG_ENGINE:
+        # Search for relevant documents
+        context_docs = RAG_ENGINE.search(message, n_results=3)
+        if context_docs:
+            context_str = "\n\n".join(context_docs)
+            system_prompt += f"\n\n[Reference Information]\nUse the following information to answer the user's request if relevant:\n{context_str}\n"
+
     reply, latency_ms = await call_llm(model, system_prompt, message)
 
     total_ms = int((time.time() - start) * 1000)
@@ -151,3 +172,21 @@ def get_policies():
 @app.get("/logs")
 def get_logs(limit: int = 50):
     return get_recent_logs(limit)
+
+@app.post("/ingest")
+async def ingest_document(file: UploadFile = File(...)):
+    if not RAG_ENGINE:
+        return {"error": "RAG Engine not initialized"}
+    
+    content = await extract_text_from_file(file)
+    if not content:
+        return {"error": "Could not extract text from file"}
+        
+    doc_id = RAG_ENGINE.add_document(content, metadata={"filename": file.filename, "timestamp": datetime.utcnow().isoformat() + "Z"})
+    return {"status": "success", "doc_id": doc_id, "filename": file.filename}
+
+@app.get("/knowledge")
+def get_knowledge_base():
+    if not RAG_ENGINE:
+        return []
+    return RAG_ENGINE.list_documents()

@@ -65,4 +65,14 @@ export class ChatService {
   getPolicies() {
     return this.http.get<any>(`${this.baseUrl}/policies`);
   }
+
+  getKnowledgeList() {
+    return this.http.get<any[]>(`${this.baseUrl}/knowledge`);
+  }
+
+  ingestFile(file: File) {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.http.post<any>(`${this.baseUrl}/ingest`, formData);
+  }
 }

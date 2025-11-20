@@ -1,11 +1,18 @@
 <mat-sidenav-container class="sidenav-container">
+
   <mat-sidenav #drawer mode="side" opened class="sidenav">
     <mat-toolbar>Menu</mat-toolbar>
 
     <div class="sidenav-content">
-      <button mat-stroked-button class="new-chat-btn" (click)="clearChat()">
+      <button mat-stroked-button class="new-chat-btn" (click)="viewMode = 'chat'; clearChat()">
         <mat-icon>add</mat-icon>
         New Chat
+      </button>
+
+      <button mat-button class="nav-btn" (click)="viewMode = 'knowledge'"
+        style="width:100%; justify-content:flex-start; margin-bottom:8px;">
+        <mat-icon>library_books</mat-icon>
+        Knowledge Base
       </button>
 
       <div class="policy-info" *ngIf="policyVersion">
@@ -16,7 +23,7 @@
 
       <h3 mat-subheader>Audit Logs</h3>
       <mat-nav-list>
-        <mat-list-item *ngFor="let log of logs" (click)="restoreChat(log)" style="cursor: pointer;">
+        <mat-list-item *ngFor="let log of logs" (click)="viewMode = 'chat'; restoreChat(log)" style="cursor: pointer;">
           <mat-icon matListItemIcon>history</mat-icon>
           <div matListItemTitle>{{ log.timestamp | date:'MM/dd HH:mm' }}</div>
           <div matListItemLine>{{ log.mode }} - {{ log.model }}</div>
@@ -26,14 +33,11 @@
   </mat-sidenav>
 
   <mat-sidenav-content>
+
     <mat-toolbar color="primary">
       <mat-icon style="margin-right: 8px;">change_history</mat-icon>
-      <span style="font-weight: bold; font-size: 1.2rem;">
-        {{ title() }}
-      </span>
-      <span style="margin-left: 12px; font-size: 0.8rem; opacity: 0.8;">
-        Intelligent Governance Hub
-      </span>
+      <span style="font-weight: bold; font-size: 1.2rem;">{{ title() }}</span>
+      <span style="margin-left: 12px; font-size: 0.8rem; opacity: 0.8;">Intelligent Governance Hub</span>
       <span class="spacer" style="flex: 1 1 auto;"></span>
       <button mat-icon-button>
         <mat-icon>account_circle</mat-icon>
@@ -41,70 +45,114 @@
     </mat-toolbar>
 
     <main class="main-content">
-      <div class="chat-window">
 
-        <mat-card *ngFor="let m of messages" class="message-card" [class.user-card]="m.from === 'user'"
-          [class.assistant-card]="m.from === 'assistant'">
-          <mat-card-header>
-            <div mat-card-avatar>
-              <mat-icon>{{ m.from === 'user' ? 'person' : 'smart_toy' }}</mat-icon>
-            </div>
-            <mat-card-title>{{ m.from === 'user' ? 'You' : 'Prism' }}</mat-card-title>
-            <mat-card-subtitle *ngIf="m.meta">
-              <mat-chip-set aria-label="Governance Info">
-                <mat-chip class="meta-chip" *ngIf="m.meta.model">
-                  {{ m.meta.model }}
-                </mat-chip>
-                <mat-chip class="meta-chip" *ngIf="m.meta.mode"
-                  [style.background-color]="m.meta.mode === 'HEAVY' ? '#ffcdd2' : '#e1f5fe'">
-                  {{ m.meta.mode }}
-                </mat-chip>
-                <mat-chip class="meta-chip" *ngIf="m.meta.latency_ms">
-                  {{ m.meta.latency_ms }}ms
-                </mat-chip>
-              </mat-chip-set>
-            </mat-card-subtitle>
-          </mat-card-header>
+      <div class="view-container" *ngIf="viewMode === 'chat'"
+        style="display: flex; flex-direction: column; height: 100%;">
 
-          <mat-card-content>
-            <p *ngIf="m.from === 'user'" style="white-space: pre-wrap;">{{ m.text }}</p>
-            <div *ngIf="m.from === 'assistant'">
-              <markdown [data]="m.text"></markdown>
-            </div>
-          </mat-card-content>
-        </mat-card>
+        <div class="chat-window">
+          <mat-card *ngFor="let m of messages" class="message-card" [class.user-card]="m.from === 'user'"
+            [class.assistant-card]="m.from === 'assistant'">
 
-        <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
+            <mat-card-header>
+              <div mat-card-avatar>
+                <mat-icon>{{ m.from === 'user' ? 'person' : 'smart_toy' }}</mat-icon>
+              </div>
+              <mat-card-title>{{ m.from === 'user' ? 'You' : 'Prism' }}</mat-card-title>
+              <mat-card-subtitle *ngIf="m.meta">
+                <mat-chip-set>
+                  <mat-chip class="meta-chip" *ngIf="m.meta?.model">{{ m.meta?.model }}</mat-chip>
+                  <mat-chip class="meta-chip" *ngIf="m.meta?.mode"
+                    [style.background-color]="m.meta?.mode === 'HEAVY' ? '#ffcdd2' : '#e1f5fe'">
+                    {{ m.meta?.mode }}
+                  </mat-chip>
+                  <mat-chip class="meta-chip" *ngIf="m.meta?.latency_ms">{{ m.meta?.latency_ms }}ms</mat-chip>
+                </mat-chip-set>
+              </mat-card-subtitle>
+            </mat-card-header>
 
-        <p *ngIf="error" class="error-text">{{ error }}</p>
+            <mat-card-content>
+              <p *ngIf="m.from === 'user'" style="white-space: pre-wrap;">{{ m.text }}</p>
+              <div *ngIf="m.from === 'assistant'">
+                <markdown [data]="m.text"></markdown>
+              </div>
+            </mat-card-content>
+          </mat-card>
+
+          <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
+          <p *ngIf="error" class="error-text">{{ error }}</p>
+        </div>
+
+        <section class="input-area">
+          <mat-chip-set *ngIf="selectedFiles.length > 0" class="file-chips">
+            <mat-chip *ngFor="let file of selectedFiles" (removed)="removeFile(file)">
+              {{ file.name }}
+              <button matChipRemove>
+                <mat-icon>cancel</mat-icon>
+              </button>
+            </mat-chip>
+          </mat-chip-set>
+
+          <div class="input-row">
+            <button mat-icon-button (click)="fileInput.click()">
+              <mat-icon>attach_file</mat-icon>
+            </button>
+            <input #fileInput type="file" (change)="onFileSelected($event)" multiple style="display: none;">
+
+            <mat-form-field appearance="outline" class="full-width">
+              <mat-label>Message...</mat-label>
+              <textarea matInput [(ngModel)]="input" rows="1" cdkTextareaAutosize (keydown.control.enter)="send()">
+              </textarea>
+              <button mat-icon-button matSuffix (click)="send()" [disabled]="loading || !input.trim()">
+                <mat-icon>send</mat-icon>
+              </button>
+            </mat-form-field>
+          </div>
+        </section>
       </div>
 
-      <section class="input-area">
-        <mat-chip-set *ngIf="selectedFiles.length > 0" class="file-chips">
-          <mat-chip *ngFor="let file of selectedFiles" (removed)="removeFile(file)">
-            {{ file.name }}
-            <button matChipRemove>
-              <mat-icon>cancel</mat-icon>
-            </button>
-          </mat-chip>
-        </mat-chip-set>
+      <div class="view-container knowledge-view" *ngIf="viewMode === 'knowledge'"
+        style="padding: 24px; overflow-y: auto;">
+        <h2>Knowledge Base Management</h2>
+        <p style="color: rgba(0,0,0,0.6);">Upload documents (PDF, TXT, CSV) to RAG index for long-term memory.</p>
 
-        <div class="input-row">
-          <button mat-icon-button (click)="fileInput.click()" type="button">
-            <mat-icon>attach_file</mat-icon>
+        <div class="upload-zone"
+          style="border: 2px dashed #ccc; padding: 24px; border-radius: 8px; margin-bottom: 24px;">
+          <button mat-raised-button color="primary" (click)="kbFileInput.click()">
+            <mat-icon>upload_file</mat-icon> Select Documents
           </button>
-          <input #fileInput type="file" (change)="onFileSelected($event)" multiple style="display: none;">
+          <input #kbFileInput type="file" multiple style="display:none" (change)="onFileSelected($event)">
 
-          <mat-form-field appearance="outline" class="full-width">
-            <mat-label>メッセージを入力...</mat-label>
-            <textarea matInput [(ngModel)]="input" rows="1" cdkTextareaAutosize cdkAutosizeMinRows="1"
-              cdkAutosizeMaxRows="5" (keydown.control.enter)="send()"></textarea>
-            <button mat-icon-button matSuffix (click)="send()" [disabled]="loading || !input.trim()">
-              <mat-icon>send</mat-icon>
-            </button>
-          </mat-form-field>
+          <div *ngIf="selectedFiles.length > 0" style="margin-top: 16px;">
+            <h4 style="margin-bottom: 8px;">Selected for Upload:</h4>
+            <mat-chip-set>
+              <mat-chip *ngFor="let f of selectedFiles" (removed)="removeFile(f)">
+                {{ f.name }}
+                <button matChipRemove><mat-icon>cancel</mat-icon></button>
+              </mat-chip>
+            </mat-chip-set>
+            <div style="margin-top: 16px;">
+              <button mat-flat-button color="accent" (click)="uploadToKnowledgeBase()">
+                Register to RAG
+              </button>
+            </div>
+          </div>
         </div>
-      </section>
+
+        <mat-divider style="margin: 20px 0;"></mat-divider>
+
+        <h3>Registered Documents</h3>
+        <mat-list>
+          <mat-list-item *ngFor="let doc of knowledgeDocs">
+            <mat-icon matListItemIcon>description</mat-icon>
+            <div matListItemTitle>{{ doc.metadata?.filename || 'Unknown File' }}</div>
+            <div matListItemLine>ID: {{ doc.id }}</div>
+          </mat-list-item>
+          <p *ngIf="!knowledgeDocs || knowledgeDocs.length === 0" style="padding: 16px; color: gray;">
+            No documents registered yet.
+          </p>
+        </mat-list>
+      </div>
+
     </main>
   </mat-sidenav-content>
 </mat-sidenav-container>
