@@ -1,0 +1,29 @@
+# --- Build Stage (ビルド用) ---
+# Angular 20系に合わせてNode v22を使用
+FROM node:22-alpine as build-stage
+
+WORKDIR /app
+
+COPY frontend/package*.json ./
+
+# 依存関係をインストール（バージョンの微細な衝突を許容する設定で）
+RUN npm install --legacy-peer-deps
+
+# 【重要】package.jsonにanimationsがないため、Material用に手動追加
+# これがないと画面が動かない可能性があります
+RUN npm install @angular/animations@^20.0.0 --legacy-peer-deps
+
+COPY frontend/ .
+
+# ビルド実行
+RUN npm run build -- --configuration production
+
+# --- Production Stage (配信用) ---
+FROM nginx:alpine
+
+# ★ここを修正しました！
+# dist/prism-enterprise-ai/browser  --> dist/frontend/browser
+COPY --from=build-stage /app/dist/frontend/browser /usr/share/nginx/html
+
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]

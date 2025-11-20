@@ -10,3 +10,4 @@ chromadb>=1.0.0      # ★ chromadbは新しめに寄せる
 rank_bm25
 pydantic>=2.0,<3.0   # ★ ここを変更（1系→2系へ）
 pydantic-settings>=2.0,<3.0  # ★ BaseSettings 用（念のため追加）
+pypdf

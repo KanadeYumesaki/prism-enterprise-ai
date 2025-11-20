@@ -1,0 +1,20 @@
+# 軽量なPythonイメージを使用
+FROM python:3.11-slim
+
+# 作業ディレクトリを設定
+WORKDIR /app
+
+# 依存関係ファイルをコピーしてインストール
+# (backendフォルダの中に requirements.txt がある想定)
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# ソースコードをコピー
+COPY backend/ .
+
+# データベースファイルなどを永続化するためのディレクトリ作成
+RUN mkdir -p /app/data
+
+# 起動コマンド (FastAPI)
+# host 0.0.0.0 は必須です（コンテナ外からアクセスするため）
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

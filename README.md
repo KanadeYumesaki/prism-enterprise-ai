@@ -90,43 +90,69 @@ graph TD
 
 ## 📦 Installation
 
-### Prerequisites
+この方法は、PythonやNode.jsの環境構築を一切スキップし、Prismを最も確実かつ迅速に起動できます。
 
-  * Python 3.10+
-  * Node.js 20+
+### Prerequisites (必要なもの)
+
+  * **Docker Desktop** (または Docker Engine)
   * Google Gemini API Key
+  * Git Clone済みのPrismプロジェクト一式
 
-### 1\. Backend Setup (FastAPI)
+-----
+
+### 1\. 📂 依存関係の確認とDockerファイルの配置
+
+以下の3つのファイルがプロジェクトの**ルートディレクトリ**にあり、内容が最新であることを確認してください。
+
+  * `docker-compose.yml`
+  * `Dockerfile.backend`
+  * `Dockerfile.frontend`
+
+#### ⚠️ 重要：Backend 依存関係の修正
+
+エラーの再発を防ぐため、`backend/requirements.txt` に以下の2つのライブラリが追記されていることを**必ず**確認してください。
+
+```text
+# backend/requirements.txt (追記確認)
+pypdf            # PDFパース機能のために必要
+pydantic-settings # 環境変数処理のために必要
+```
+
+-----
+
+### 2\. 🔑 環境設定ファイル (.env) の作成
+
+FastAPIコンテナにAPIキーを安全に渡すため、プロジェクトの**ルートディレクトリ**で設定ファイルを準備します。
 
 ```bash
-cd backend
-
-# 仮想環境の作成と有効化
-python -m venv .venv
-source .venv/bin/activate  # Windows: .\.venv\Scripts\Activate.ps1
-
-# 依存ライブラリのインストール (RAG, ChromaDB, FastAPI, etc.)
-pip install -r requirements.txt
-pip install pydantic-settings  # Pydantic V2 依存関係の調整
-
-# 環境変数の設定
+# ルートディレクトリで実行
 cp .env.example .env
-# .env ファイルを開き、GEMINI_API_KEY を入力してください
 ```
 
-### 2\. Frontend Setup (Angular)
+`**.env**` ファイルを開き、`GEMINI_API_KEY` を入力して保存してください。
+
+```text
+# .env ファイル (ルートディレクトリ)
+GEMINI_API_KEY="ここにあなたのGemini APIキーを記述します"
+```
+
+-----
+
+### 3\. ✨ Prismの起動 (One Command Launch)
+
+プロジェクトのルートディレクトリで、以下のコマンドを一度だけ実行します。フロントとバックエンドが同時にビルド・起動し、バックグラウンドで動作します。
 
 ```bash
-cd frontend
-
-# 依存ライブラリのインストール
-npm install
-
-# 開発サーバーの起動
-ng serve
+docker-compose up -d --build
 ```
 
-Access `http://localhost:4200` to launch Prism.
+### 4\. アクセスと利用
+
+サーバーが立ち上がったら、ブラウザで以下のURLにアクセスしてください。
+
+  * Access `http://localhost` to launch Prism.
+
+起動中のサービスを停止・削除する場合は、同じディレクトリで `docker-compose down` を実行してください。
 
 -----
 
@@ -170,4 +196,4 @@ modes:
 
 ## 📝 License
 
-[MIT](https://www.google.com/search?q=LICENSE)
+[MIT](LICENSE)

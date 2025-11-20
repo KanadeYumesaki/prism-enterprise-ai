@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  # バックエンド (API & DB)
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    ports:
+      - "8000:8000"
+    volumes:
+      # DBやログの永続化のため
+      - ./data:/app/data
+    env_file: # ★ここで .env ファイルを読み込みます
+      - .env
+
+  # フロントエンド (UI)
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "80:80" # ブラウザから http://localhost:80 でアクセス可能に
+    depends_on:
+      - api
