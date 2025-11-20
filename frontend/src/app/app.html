@@ -9,7 +9,7 @@
         New Chat
       </button>
 
-      <button mat-button class="nav-btn" (click)="viewMode = 'knowledge'"
+      <button mat-button class="nav-btn" (click)="setViewMode('knowledge')"
         style="width:100%; justify-content:flex-start; margin-bottom:8px;">
         <mat-icon>library_books</mat-icon>
         Knowledge Base
@@ -43,13 +43,14 @@
         <mat-icon>account_circle</mat-icon>
       </button>
     </mat-toolbar>
+    <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
 
     <main class="main-content">
 
       <div class="view-container" *ngIf="viewMode === 'chat'"
         style="display: flex; flex-direction: column; height: 100%;">
 
-        <div class="chat-window">
+        <div class="chat-window" #chatWindow>
           <mat-card *ngFor="let m of messages" class="message-card" [class.user-card]="m.from === 'user'"
             [class.assistant-card]="m.from === 'assistant'">
 
@@ -65,7 +66,7 @@
                     [style.background-color]="m.meta?.mode === 'HEAVY' ? '#ffcdd2' : '#e1f5fe'">
                     {{ m.meta?.mode }}
                   </mat-chip>
-                  <mat-chip class="meta-chip" *ngIf="m.meta?.latency_ms">{{ m.meta?.latency_ms }}ms</mat-chip>
+                  <mat-chip class="meta-chip" *ngIf="m.meta?.latency_ms">{{ m.meta.latency_ms }}ms</mat-chip>
                 </mat-chip-set>
               </mat-card-subtitle>
             </mat-card-header>
@@ -78,7 +79,6 @@
             </mat-card-content>
           </mat-card>
 
-          <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
           <p *ngIf="error" class="error-text">{{ error }}</p>
         </div>
 

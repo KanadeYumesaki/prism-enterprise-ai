@@ -1,33 +1,37 @@
+
 # 🔺 Prism - Enterprise AI Governance Hub
 
-> **Intelligent Gateway for Secure & Optimized LLM Orchestration**
+> **Intelligent Gateway for Secure, Cost-Optimized, and RAG-Enhanced LLM Orchestration.**
 
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Version](https://img.shields.io/badge/version-1.0.0-green)
-![Status](https://img.shields.io/badge/status-Active-success)
+![Status](https://img.shields.io/badge/status-Production_Ready-success)
 
-**Prism (プリズム)** は、企業利用を想定した次世代の AI ガバナンス・プラットフォームです。
-ユーザーと複数の LLM（Gemini, GPT 等）の間に「ガバナンス・カーネル」を配置することで、セキュリティ、コスト最適化、そして業務特化型の推論能力を同時に提供します。
+**Prism (プリズム)** は、企業利用を想定し、セキュリティとコスト管理を両立させた次世代の AI ガバナンス・プラットフォームです。
+ユーザーとLLMの間に「ガバナンス・カーネル」を配置することで、安全に社内情報（RAG）を活用し、業務特化型の推論を実現します。
 
 ---
 
 ## 🚀 Key Features (主な機能)
 
-### 1. Dynamic Governance Kernel
+### 1. 🛡️ Governance & Dynamic Routing
 入力内容をリアルタイムで解析し、最適な「モード」へ自動ルーティングします。
-- **FLASH Mode:** ニュースや株価などの速報（Web検索）
-- **HEAVY Mode:** 契約書や医療情報の精密分析（PII検知・高精度モデル）
-- **FAST Mode:** 日常的な雑談や軽量タスク
+- **FLASH Mode:** ニュースや株価などの速報（Web検索利用）。
+- **HEAVY Mode:** 契約書や医療情報の精密分析（PII検知・高精度モデル）。
+- **PII Shield:** 機密情報（個人情報など）を検知し、外部流出を未然に防ぐマスキング機能。
 
-### 2. Multi-modal Analysis
+### 2. 🧠 Hybrid RAG (Retrieval-Augmented Generation)
+**ChromaDB (ベクトル検索)** と **SQLite (キーワード検索)** を組み合わせたハイブリッド検索エンジンを搭載。
+- **ナレッジベース:** 社内規定やマニュアルを登録し、AIに「長期記憶」を持たせることが可能。
+- **高精度な検索:** 「概念（ゼロトラスト）」と「品番（PROJ-A77）」の両方を正確に検索し、ハルシネーション（嘘）を抑制。
+
+### 3. 📊 Multi-modal Analysis
 複数のファイル（PDF, CSV, Excel）を同時にアップロードし、LLM のコンテキストウィンドウに統合。
-- **比較分析:** A社とB社の決算書PDFを比較し、差異を表形式で出力。
-- **データ抽出:** 非構造化データからのインサイト抽出。
+- **比較分析:** 複数の決算書PDFを読み込み、差異や数値を比較してMarkdownの表形式で出力。
 
-### 3. Audit Logging & Transparency
-全てのインタラクションは SQLite ベースの監査ログに記録されます。
-- **UI統合:** サイドバーから過去のログ（使用モデル、レイテンシ、モード）を即座に確認・復元可能。
-- **透明性:** AI が「なぜその回答をしたか」のプロセスが可視化されます。
+### 4. ✨ Real-time UX & Audit
+- **ストリーミング応答 (NDJSON):** AIの回答をリアルタイムで画面に逐次表示し、応答待ちのストレスを解消。
+- **監査ログ:** 全ての会話、使われたモデル、推論プロセスをデータベースに記録。サイドバーからログを復元し、利用状況を監査可能。
 
 ---
 
@@ -45,18 +49,42 @@ graph TD
         BE --> Router["Mode Router"]
         BE --> PII["PII Shield"]
         Router -->|"Routing"| Model["LLM Orchestrator"]
+        
+        subgraph "Hybrid RAG Engine"
+            BE --> Vector["Vector Store (ChromaDB)"]
+            BE --> Keyword["Keyword Store (SQLite)"]
+        end
     end
     
-    Model -->|"API Call"| Google["Google Gemini 1.5 Pro/Flash"]
+    Model -->|"API Call"| Google["Google Gemini 2.5 Pro/Flash"]
     BE -->|"Audit Log"| DB[("SQLite / Audit DB")]
 ````
 
 ### Tech Stack
 
-  * **Frontend:** Angular 18+, Angular Material, Signals, ngx-markdown
-  * **Backend:** Python 3.11+, FastAPI, Pydantic, SQLAlchemy
-  * **AI Engine:** Google Gemini 1.5 Pro / Flash (via Google Gen AI SDK)
-  * **Data:** SQLite (Audit Logs), ChromaDB (Future plan for RAG)
+  * **Frontend:** Angular 18+, Angular Material (Enterprise UI), Signals, ngx-markdown
+  * **Backend:** Python 3.11+, FastAPI (ASGI/Async), Pydantic
+  * **AI Engine:** Google Gemini 2.5 Pro / Flash (Dynamic Model Routing)
+  * **Data:** **ChromaDB** (Vector Search), **SQLite** (Audit Logs & Keyword Search)
+  * **Communication:** NDJSON Streaming
+
+-----
+
+## 🤝 Contribution & Contact (利用上の注意)
+
+**⚠️ IMPORTANT: ご利用の前に**
+
+本プロジェクトは、筆者のポートフォリオおよび技術検証用として、AI駆動開発（AI-Driven Development）によって作成されました。
+
+**本コードをフォーク、または商用利用・大規模展開のためにご活用される場合は、必ず事前に筆者までご連絡をお願いいたします。**
+（学習用・個人利用の範囲であればご自由に参照ください）
+
+これは、筆者がこのプロジェクトの貢献者として、また今後の開発ロードマップを把握するためのお願いです。
+
+| 項目 | 詳細 |
+| :--- | :--- |
+| **連絡先** | GitHub Issue または kanade.yumesaki.mail@gmail.com |
+| **ライセンス** | MIT (商用利用可能ですが、上記連絡をお願いします) |
 
 -----
 
@@ -77,8 +105,9 @@ cd backend
 python -m venv .venv
 source .venv/bin/activate  # Windows: .\.venv\Scripts\Activate.ps1
 
-# 依存ライブラリのインストール
+# 依存ライブラリのインストール (RAG, ChromaDB, FastAPI, etc.)
 pip install -r requirements.txt
+pip install pydantic-settings  # Pydantic V2 依存関係の調整
 
 # 環境変数の設定
 cp .env.example .env
@@ -103,17 +132,17 @@ Access `http://localhost:4200` to launch Prism.
 
 ## 📖 Usage Guide
 
-### 決算書の比較分析（例）
+### 1\. 知識の登録 (Knowledge Ingestion)
 
-1.  サイドバーの「New Chat」をクリック。
-2.  画面下部のクリップアイコン📎から、比較したい複数のPDF（例：決算短信）を選択。
-3.  メッセージ欄に\*\*「アップロードした2社の営業利益率を比較し、表にまとめて」\*\*と入力して送信。
-4.  Prism がファイルを解析し、Markdown 形式でレポートを出力します。
+1.  サイドバーの **「Knowledge Base」** をクリック。
+2.  「Select Documents」から社内規定（PDF）やマニュアル（TXT）を選択。
+3.  **「Register to RAG」** をクリックしてナレッジベースに登録。
 
-### 監査ログの確認
+### 2\. ハイブリッド検索とチャット
 
-1.  サイドバーの「Audit Logs」リストを確認。
-2.  過去の履歴をクリックすると、その時点の会話コンテキストがメイン画面に復元されます。
+1.  「New Chat」に戻る。
+2.  質問を入力（例：「プロジェクトA77の経費上限は？」）。
+3.  Prismは **RAG（知識）** と **ガバナンス（モード判定）** を組み合わせ、最適なモデルで正確な回答をストリーミング生成します。
 
 -----
 
@@ -125,7 +154,7 @@ Access `http://localhost:4200` to launch Prism.
 modes:
   - id: "HEAVY"
     safety_level: "high"
-    allow_web_search: true
+    allow_web_search: false # 社内秘情報の流出防止
     triggers:
       keywords_any: ["契約", "法務", "PII"]
 ```
@@ -135,10 +164,10 @@ modes:
 ## 🛡 Security Note
 
   * 本システムは **PII（個人識別情報）** の簡易検知機能を備えていますが、完全な保護を保証するものではありません。
-  * 実際の機密データを扱う際は、オンプレミス LLM への切り替えや、エンタープライズ契約済みの API 利用を推奨します。
+  * 実際の機密データを扱う際は、法人契約の API（Vertex AIなど）を利用し、インフラのセキュリティ設定を厳格に行ってください。
 
 -----
 
 ## 📝 License
-[MIT](https://www.google.com/search?q=LICENSE)
 
+[MIT](https://www.google.com/search?q=LICENSE)

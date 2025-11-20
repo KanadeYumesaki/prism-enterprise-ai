@@ -1,5 +1,5 @@
 // src/app/app.ts
-import { Component, signal, OnInit } from '@angular/core';
+import { Component, signal, OnInit, ViewChild, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ChatService, ChatResponse } from './chat.service';
@@ -50,6 +50,7 @@ import { MarkdownComponent } from 'ngx-markdown';
   styleUrl: './app.css',
 })
 export class App implements OnInit {
+  @ViewChild('chatWindow') private chatWindow!: ElementRef;
   protected readonly title = signal('Prism');
 
   input = '';
@@ -175,21 +176,37 @@ export class App implements OnInit {
     // 自分の発話を追加
     this.messages = [...this.messages, { from: 'user', text: content }];
 
+    // Assistantのプレースホルダーを追加
+    const assistantMsg: ChatMessage = { from: 'assistant', text: '' };
+    this.messages = [...this.messages, assistantMsg];
+
     this.input = '';
     this.error = null;
     this.loading = true;
+    this.scrollToBottom();
 
-    this.chat.sendMessage(content, 'frontend-user', this.selectedFiles).subscribe({
-      next: (res: ChatResponse) => {
-        this.messages = [
-          ...this.messages,
-          { from: 'assistant', text: res.reply, meta: res },
-        ];
-        this.loading = false;
-        // 送信成功したらファイルをリセット
-        this.selectedFiles = [];
-        // ログを更新
-        this.fetchSidebarData();
+    this.chat.sendMessageStream(content, 'frontend-user', this.selectedFiles).subscribe({
+      next: (data) => {
+        if (data.type === 'status') {
+          // ステータス表示（検索中...など）
+          // まだ回答が始まっていないので、テキストを上書きして表示
+          assistantMsg.text = `<i style="color:gray">${data.content}</i>`;
+          this.scrollToBottom();
+        } else if (data.type === 'chunk') {
+          // 最初のチャンクが来たら、ステータス表示を消して回答追記モードへ
+          if (assistantMsg.text.startsWith('<i style="color:gray">')) {
+            assistantMsg.text = '';
+          }
+          assistantMsg.text += data.content;
+          this.scrollToBottom();
+        } else if (data.type === 'complete') {
+          // 完了時のメタデータ更新
+          assistantMsg.meta = data.meta;
+          this.loading = false;
+          this.selectedFiles = [];
+          this.fetchSidebarData();
+          this.scrollToBottom();
+        }
       },
       error: (err: unknown) => {
         console.error(err);
@@ -222,5 +239,14 @@ export class App implements OnInit {
         }
       }
     ];
+    setTimeout(() => this.scrollToBottom(), 100);
+  }
+
+  scrollToBottom(): void {
+    setTimeout(() => {
+      try {
+        this.chatWindow.nativeElement.scrollTop = this.chatWindow.nativeElement.scrollHeight;
+      } catch (err) { }
+    }, 0);
   }
 }

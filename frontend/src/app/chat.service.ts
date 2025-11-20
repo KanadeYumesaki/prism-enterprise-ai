@@ -53,7 +53,67 @@ export class ChatService {
     // [LEARN] HttpClient は FormData を渡すと、自動的に
     // 'Content-Type': 'multipart/form-data; boundary=...'
     // というヘッダーを設定してくれます。自分でヘッダーを設定する必要はありません。
+    // 'Content-Type': 'multipart/form-data; boundary=...'
+    // というヘッダーを設定してくれます。自分でヘッダーを設定する必要はありません。
     return this.http.post<ChatResponse>(`${this.baseUrl}/chat`, formData);
+  }
+
+  // [NEW CODE] ストリーミング対応
+  sendMessageStream(message: string, userId = 'frontend-user', files: File[] = []): Observable<any> {
+    const formData = new FormData();
+    formData.append('user_id', userId);
+    formData.append('message', message);
+    if (files && files.length > 0) {
+      files.forEach(file => formData.append('files', file));
+    }
+
+    return new Observable(observer => {
+      fetch(`${this.baseUrl}/chat`, {
+        method: 'POST',
+        body: formData
+      }).then(async response => {
+        if (!response.body) {
+          observer.error('No response body');
+          return;
+        }
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            // 最後の行は不完全な可能性があるためバッファに残す
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+              if (line.trim()) {
+                try {
+                  const data = JSON.parse(line);
+                  observer.next(data);
+                } catch (e) {
+                  console.error('JSON Parse Error:', e, line);
+                }
+              }
+            }
+          }
+          // 残りのバッファを処理
+          if (buffer.trim()) {
+            try {
+              const data = JSON.parse(buffer);
+              observer.next(data);
+            } catch (e) { console.error('Final JSON Parse Error:', e, buffer); }
+          }
+          observer.complete();
+        } catch (err) {
+          observer.error(err);
+        }
+      }).catch(err => observer.error(err));
+    });
   }
 
   // [LEARN] HttpClient.get: サーバーからデータを取得するためのメソッド。

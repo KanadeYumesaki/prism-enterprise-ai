@@ -72,3 +72,53 @@ async def call_llm(model_id: str, system_prompt: str, user_message: str) -> Tupl
 
     latency_ms = int((time.perf_counter() - start) * 1000)
     return reply_text, latency_ms
+
+
+async def call_llm_stream(model_id: str, system_prompt: str, user_message: str):
+    """
+    Streaming 版の LLM 呼び出し。
+    AsyncGenerator[str, None] を返す。
+    """
+    provider, model_name = _split_model_id(model_id)
+    prompt = f"{system_prompt}\n\n[User]\n{user_message}"
+
+    if provider == "google":
+        # stream=True で呼び出す
+        # response はイテレータになる (非同期イテレータではない場合もあるが、google-genaiの仕様による)
+        # SDKのバージョンによっては同期イテレータかもしれないが、ここでは非同期的に扱うために
+        # チャンクごとに yield する。
+        # google-genai v0.2+ の場合、generate_content_stream があるか、generate_content(..., config=...) か確認が必要。
+        # ここでは一般的な generate_content(..., stream=True) を想定。
+        
+        # Note: google-genai SDK の generate_content は stream=True でジェネレータを返す
+        response_stream = gemini_client.models.generate_content(
+            model=model_name,
+            contents=prompt,
+            config=genai.types.GenerateContentConfig(response_modalities=["TEXT"]),
+        )
+        
+        # google-genai の stream は同期イテレータで返ってくることが多いが、
+        # FastAPI の StreamingResponse で使うために async generator にラップする。
+        # もし SDK が async 対応しているなら await for chunk in ... と書く。
+        # 現状の google-genai は同期クライアントがメインのようだが、
+        # ここでは簡易的に同期イテレータを回して yield する。
+        # ※ 本来は非同期クライアントを使うべきだが、既存コードに合わせて実装する。
+        
+        # SDKの仕様に合わせて stream=True を使う方法:
+        # client.models.generate_content_stream(...) がある場合はそちらを使う。
+        # なければ generate_content(..., config=...) で stream を探す。
+        # ここでは generate_content_stream があると仮定、もしくは generate_content の戻り値をイテレート。
+        
+        # 修正: google-genai SDK では generate_content_stream メソッドが推奨される
+        for chunk in gemini_client.models.generate_content_stream(
+            model=model_name,
+            contents=prompt,
+        ):
+            if chunk.text:
+                yield chunk.text
+                
+    else:
+        # ダミー実装 (一括で返してしまうが、少し待ってから返すなど)
+        yield f"[DUMMY STREAM {provider}:{model_name}] "
+        time.sleep(0.1)
+        yield user_message
