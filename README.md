@@ -170,4 +170,4 @@ modes:
 
 ## 📝 License
 
-[MIT](https://www.google.com/search?q=LICENSE)
+[MIT](LICENSE)
