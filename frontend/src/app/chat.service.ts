@@ -1,7 +1,8 @@
 // src/app/chat.service.ts
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import { Observable, throwError } from 'rxjs';
+import { retry, timeout, catchError } from 'rxjs/operators';
 
 export interface ChatRequest {
   message: string;
@@ -58,24 +59,32 @@ export class ChatService {
     return this.http.post<ChatResponse>(`${this.baseUrl}/chat`, formData);
   }
 
-  // [NEW CODE] ストリーミング対応
+  // [NEW CODE] ストリーミング対応 (Refactored for Production)
   sendMessageStream(message: string, userId = 'frontend-user', files: File[] = []): Observable<any> {
-    const formData = new FormData();
-    formData.append('user_id', userId);
-    formData.append('message', message);
-    if (files && files.length > 0) {
-      files.forEach(file => formData.append('files', file));
-    }
+    return new Observable<any>(observer => {
+      const controller = new AbortController();
+      const signal = controller.signal;
 
-    return new Observable(observer => {
+      const formData = new FormData();
+      formData.append('user_id', userId);
+      formData.append('message', message);
+      if (files && files.length > 0) {
+        files.forEach(file => formData.append('files', file));
+      }
+
       fetch(`${this.baseUrl}/chat`, {
         method: 'POST',
-        body: formData
+        body: formData,
+        signal
       }).then(async response => {
-        if (!response.body) {
-          observer.error('No response body');
-          return;
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Server Error (${response.status}): ${errorText || response.statusText}`);
         }
+        if (!response.body) {
+          throw new Error('No response body received from server.');
+        }
+
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
@@ -87,7 +96,6 @@ export class ChatService {
 
             buffer += decoder.decode(value, { stream: true });
             const lines = buffer.split('\n');
-            // 最後の行は不完全な可能性があるためバッファに残す
             buffer = lines.pop() || '';
 
             for (const line of lines) {
@@ -96,24 +104,51 @@ export class ChatService {
                   const data = JSON.parse(line);
                   observer.next(data);
                 } catch (e) {
-                  console.error('JSON Parse Error:', e, line);
+                  console.warn('Stream Parse Warning:', e, line);
                 }
               }
             }
           }
-          // 残りのバッファを処理
+          // Process remaining buffer
           if (buffer.trim()) {
             try {
               const data = JSON.parse(buffer);
               observer.next(data);
-            } catch (e) { console.error('Final JSON Parse Error:', e, buffer); }
+            } catch (e) { console.warn('Final Stream Parse Warning:', e, buffer); }
           }
           observer.complete();
         } catch (err) {
           observer.error(err);
         }
-      }).catch(err => observer.error(err));
-    });
+      }).catch(err => {
+        if (err.name === 'AbortError') {
+          observer.complete(); // Cancelled by user
+        } else {
+          observer.error(err);
+        }
+      });
+
+      return () => controller.abort();
+    }).pipe(
+      // ネットワークエラーなどで即死した場合のリトライ
+      retry({ count: 2, delay: 1000 }),
+      // 30秒間何もレスポンスがない場合はタイムアウト
+      timeout(30000),
+      catchError(err => {
+        // ユーザー向けのエラーメッセージに変換
+        let userMessage = 'An unexpected error occurred.';
+        if (err.name === 'TimeoutError') {
+          userMessage = 'Connection timed out. The server is taking too long to respond.';
+        } else if (err.message && err.message.includes('Server Error')) {
+          userMessage = err.message;
+        } else if (err.status === 0) {
+          userMessage = 'Network error. Please check your connection.';
+        } else {
+          userMessage = `Error: ${err.message || 'Unknown error'}`;
+        }
+        return throwError(() => new Error(userMessage));
+      })
+    );
   }
 
   // [LEARN] HttpClient.get: サーバーからデータを取得するためのメソッド。

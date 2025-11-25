@@ -1,10 +1,9 @@
-
 # 🔺 Prism - Enterprise AI Governance Hub
 
 > **Intelligent Gateway for Secure, Cost-Optimized, and RAG-Enhanced LLM Orchestration.**
 
 ![License](https://img.shields.io/badge/license-MIT-blue)
-![Version](https://img.shields.io/badge/version-1.0.0-green)
+![Version](https://img.shields.io/badge/version-1.1.0-green)
 ![Status](https://img.shields.io/badge/status-Production_Ready-success)
 
 **Prism (プリズム)** は、企業利用を想定し、セキュリティとコスト管理を両立させた次世代の AI ガバナンス・プラットフォームです。
@@ -14,22 +13,28 @@
 
 ## 🚀 Key Features (主な機能)
 
-### 1. 🛡️ Governance & Dynamic Routing
+### 1. 🔐 Multi-User & Secure Login [NEW]
+**複数ユーザーによる同時ログインとセッション分離に対応しました。**
+- **個別認証:** ユーザーごとのID管理により、セキュアなアクセス制御を実現。
+- **履歴の分離:** チャット履歴や監査ログはユーザーID（`user_id`）に紐づいて管理され、他者のデータと混在することはありません。
+- **パーソナライズ:** ユーザーごとの利用状況に応じたコンテキスト維持が可能。
+
+### 2. 🛡️ Governance & Dynamic Routing
 入力内容をリアルタイムで解析し、最適な「モード」へ自動ルーティングします。
 - **FLASH Mode:** ニュースや株価などの速報（Web検索利用）。
 - **HEAVY Mode:** 契約書や医療情報の精密分析（PII検知・高精度モデル）。
 - **PII Shield:** 機密情報（個人情報など）を検知し、外部流出を未然に防ぐマスキング機能。
 
-### 2. 🧠 Hybrid RAG (Retrieval-Augmented Generation)
+### 3. 🧠 Hybrid RAG (Retrieval-Augmented Generation)
 **ChromaDB (ベクトル検索)** と **SQLite (キーワード検索)** を組み合わせたハイブリッド検索エンジンを搭載。
 - **ナレッジベース:** 社内規定やマニュアルを登録し、AIに「長期記憶」を持たせることが可能。
 - **高精度な検索:** 「概念（ゼロトラスト）」と「品番（PROJ-A77）」の両方を正確に検索し、ハルシネーション（嘘）を抑制。
 
-### 3. 📊 Multi-modal Analysis
+### 4. 📊 Multi-modal Analysis
 複数のファイル（PDF, CSV, Excel）を同時にアップロードし、LLM のコンテキストウィンドウに統合。
 - **比較分析:** 複数の決算書PDFを読み込み、差異や数値を比較してMarkdownの表形式で出力。
 
-### 4. ✨ Real-time UX & Audit
+### 5. ✨ Real-time UX & Audit
 - **ストリーミング応答 (NDJSON):** AIの回答をリアルタイムで画面に逐次表示し、応答待ちのストレスを解消。
 - **監査ログ:** 全ての会話、使われたモデル、推論プロセスをデータベースに記録。サイドバーからログを復元し、利用状況を監査可能。
 
@@ -41,11 +46,11 @@ Frontend (Angular) と Backend (FastAPI) によるモダンな疎結合アーキ
 
 ```mermaid
 graph TD
-    User["User / Browser"] -->|"HTTPS / Multipart"| FE["Angular Frontend (Prism UI)"]
-    FE -->|"REST API / FormData"| BE["FastAPI Backend"]
+    User["User / Browser"] -->|"HTTPS / Auth"| FE["Angular Frontend (Prism UI)"]
+    FE -->|"REST API / Bearer Token"| BE["FastAPI Backend"]
     
     subgraph "Governance Kernel (Backend)"
-        BE --> Parser["File Parser (PDF/CSV)"]
+        BE --> Auth["Auth Manager (User Session)"]
         BE --> Router["Mode Router"]
         BE --> PII["PII Shield"]
         Router -->|"Routing"| Model["LLM Orchestrator"]
@@ -57,16 +62,16 @@ graph TD
     end
     
     Model -->|"API Call"| Google["Google Gemini 2.5 Pro/Flash"]
-    BE -->|"Audit Log"| DB[("SQLite / Audit DB")]
+    BE -->|"User Log & Audit"| DB[("SQLite / Audit DB")]
 ````
 
 ### Tech Stack
 
   * **Frontend:** Angular 18+, Angular Material (Enterprise UI), Signals, ngx-markdown
   * **Backend:** Python 3.11+, FastAPI (ASGI/Async), Pydantic
+  * **Auth:** Session / Token Based Authentication
   * **AI Engine:** Google Gemini 2.5 Pro / Flash (Dynamic Model Routing)
   * **Data:** **ChromaDB** (Vector Search), **SQLite** (Audit Logs & Keyword Search)
-  * **Communication:** NDJSON Streaming
 
 -----
 
@@ -110,12 +115,15 @@ graph TD
 
 #### ⚠️ 重要：Backend 依存関係の修正
 
-エラーの再発を防ぐため、`backend/requirements.txt` に以下の2つのライブラリが追記されていることを**必ず**確認してください。
+エラーの再発を防ぐため、`backend/requirements.txt` に以下のライブラリが含まれていることを確認してください。
 
 ```text
 # backend/requirements.txt (追記確認)
-pypdf            # PDFパース機能のために必要
-pydantic-settings # 環境変数処理のために必要
+pypdf            # PDFパース機能
+pydantic-settings # 環境変数処理
+python-multipart # 認証フォームデータ処理用
+passlib[bcrypt]  # パスワードハッシュ化 (認証用)
+python-jose      # JWTトークン生成 (認証用)
 ```
 
 -----
@@ -134,6 +142,7 @@ cp .env.example .env
 ```text
 # .env ファイル (ルートディレクトリ)
 GEMINI_API_KEY="ここにあなたのGemini APIキーを記述します"
+SECRET_KEY="認証用のランダムな文字列を設定してください"
 ```
 
 -----
@@ -151,6 +160,7 @@ docker-compose up -d --build
 サーバーが立ち上がったら、ブラウザで以下のURLにアクセスしてください。
 
   * Access `http://localhost` to launch Prism.
+  * ログイン画面が表示されます。初期ユーザー情報を入力してログインしてください。
 
 起動中のサービスを停止・削除する場合は、同じディレクトリで `docker-compose down` を実行してください。
 
@@ -158,11 +168,11 @@ docker-compose up -d --build
 
 ## 📖 Usage Guide
 
-### 1\. 知識の登録 (Knowledge Ingestion)
+### 1\. ログインと知識の登録
 
-1.  サイドバーの **「Knowledge Base」** をクリック。
-2.  「Select Documents」から社内規定（PDF）やマニュアル（TXT）を選択。
-3.  **「Register to RAG」** をクリックしてナレッジベースに登録。
+1.  ログイン画面でユーザー認証を行います。
+2.  サイドバーの **「Knowledge Base」** をクリック。
+3.  「Select Documents」から社内規定（PDF）やマニュアル（TXT）を選択し、**「Register to RAG」** をクリック。
 
 ### 2\. ハイブリッド検索とチャット
 
@@ -196,4 +206,4 @@ modes:
 
 ## 📝 License
 
-[MIT](LICENSE)
+[MIT](https://www.google.com/search?q=LICENSE)

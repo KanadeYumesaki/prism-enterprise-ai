@@ -1,4 +1,3 @@
-// src/app/app.ts
 import { Component, signal, OnInit, ViewChild, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -7,6 +6,7 @@ import { ChatService, ChatResponse } from './chat.service';
 interface ChatMessage {
   from: 'user' | 'assistant';
   text: string;
+  status?: string; // [NEW] ステータス表示用 (Thinking, Searching...)
   meta?: Partial<ChatResponse>;
 }
 
@@ -22,6 +22,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar'; // [NEW]
 import { MarkdownComponent } from 'ngx-markdown';
 
 @Component({
@@ -30,13 +31,11 @@ import { MarkdownComponent } from 'ngx-markdown';
   imports: [
     CommonModule,
     FormsModule,
-    // [LEARN] Material Designのコンポーネントを利用可能にします
     MatSidenavModule,
     MatToolbarModule,
     MatListModule,
     MatIconModule,
     MatButtonModule,
-    MatCardModule,
     MatCardModule,
     MatChipsModule,
     MatTableModule,
@@ -44,6 +43,7 @@ import { MarkdownComponent } from 'ngx-markdown';
     MatInputModule,
     MatProgressBarModule,
     MatTooltipModule,
+    MatSnackBarModule, // [NEW]
     MarkdownComponent
   ],
   templateUrl: './app.html',
@@ -66,18 +66,16 @@ export class App implements OnInit {
     this.selectedFiles = this.selectedFiles.filter(file => file !== fileToRemove);
   }
 
-  // サイドバー用データ
   logs: any[] = [];
   policyVersion = 'Loading...';
 
-  constructor(private chat: ChatService) { }
+  constructor(private chat: ChatService, private snackBar: MatSnackBar) { } // [NEW] Inject SnackBar
 
   ngOnInit() {
     this.fetchSidebarData();
   }
 
   fetchSidebarData() {
-    // ログ取得
     this.chat.getLogs().subscribe({
       next: (data) => {
         this.logs = data;
@@ -85,7 +83,6 @@ export class App implements OnInit {
       error: (e) => console.error('Failed to fetch logs', e)
     });
 
-    // ポリシー取得
     this.chat.getPolicies().subscribe({
       next: (data) => {
         this.policyVersion = data.version || 'Unknown';
@@ -94,32 +91,65 @@ export class App implements OnInit {
     });
   }
 
-  // 新規チャット（画面クリア）
   clearChat() {
     this.messages = [];
     this.error = null;
     this.input = '';
-    this.input = '';
     this.selectedFiles = [];
   }
 
-  // [LEARN] ファイル選択時のイベントハンドラ
-  // HTMLの <input type="file" multiple (change)="onFileSelected($event)"> から呼ばれます。
+  // [NEW] ファイルバリデーション
+  validateFile(file: File): boolean {
+    const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+    const ALLOWED_EXTENSIONS = ['.txt', '.pdf', '.csv', '.md', '.json', '.py', '.js', '.ts', '.html', '.css'];
+
+    if (file.size > MAX_SIZE) {
+      this.showError(`File ${file.name} is too large. Max size is 10MB.`);
+      return false;
+    }
+
+    const ext = '.' + file.name.split('.').pop()?.toLowerCase();
+    // 拡張子チェック（必要に応じて緩和）
+    // if (!ALLOWED_EXTENSIONS.includes(ext)) {
+    //   this.showError(`File type ${ext} is not supported.`);
+    //   return false;
+    // }
+    return true;
+  }
+
+  showError(message: string) {
+    this.snackBar.open(message, 'Close', {
+      duration: 5000,
+      panelClass: ['error-snackbar']
+    });
+    this.error = message;
+  }
+
+  showSuccess(message: string) {
+    this.snackBar.open(message, 'OK', {
+      duration: 3000,
+      panelClass: ['success-snackbar']
+    });
+  }
+
   onFileSelected(event: Event): void {
     const element = event.currentTarget as HTMLInputElement;
     const fileList: FileList | null = element.files;
     if (fileList && fileList.length > 0) {
       const newFiles = Array.from(fileList);
 
-      // 重複排除と上限チェック
       newFiles.forEach(file => {
-        if (this.selectedFiles.length >= 10) return;
+        if (this.selectedFiles.length >= 10) {
+          this.showError('Max 10 files allowed.');
+          return;
+        }
+        if (!this.validateFile(file)) return; // [NEW] Validation
+
         if (!this.selectedFiles.some(f => f.name === file.name)) {
           this.selectedFiles.push(file);
         }
       });
     }
-    // [IMPORTANT] 同じファイルを再選択できるように値をクリア
     element.value = '';
   }
 
@@ -135,7 +165,7 @@ export class App implements OnInit {
       next: (data) => {
         this.knowledgeDocs = data;
       },
-      error: (e) => console.error('Failed to fetch knowledge base', e)
+      error: (e) => this.showError('Failed to fetch knowledge base')
     });
   }
 
@@ -154,15 +184,16 @@ export class App implements OnInit {
             this.loading = false;
             this.selectedFiles = [];
             this.fetchKnowledgeBase();
-            alert('All files uploaded successfully!');
+            this.showSuccess('All files uploaded successfully!');
           }
         },
         error: (e) => {
           console.error(e);
           completed++;
+          this.showError(`Failed to upload ${file.name}`);
           if (completed === total) {
             this.loading = false;
-            this.fetchKnowledgeBase(); // Refresh anyway
+            this.fetchKnowledgeBase();
           }
         }
       });
@@ -173,11 +204,9 @@ export class App implements OnInit {
     const content = this.input.trim();
     if (!content || this.loading) return;
 
-    // 自分の発話を追加
     this.messages = [...this.messages, { from: 'user', text: content }];
 
-    // Assistantのプレースホルダーを追加
-    const assistantMsg: ChatMessage = { from: 'assistant', text: '' };
+    const assistantMsg: ChatMessage = { from: 'assistant', text: '', status: 'Thinking...' }; // [NEW] Initial status
     this.messages = [...this.messages, assistantMsg];
 
     this.input = '';
@@ -188,19 +217,15 @@ export class App implements OnInit {
     this.chat.sendMessageStream(content, 'frontend-user', this.selectedFiles).subscribe({
       next: (data) => {
         if (data.type === 'status') {
-          // ステータス表示（検索中...など）
-          // まだ回答が始まっていないので、テキストを上書きして表示
-          assistantMsg.text = `<i style="color:gray">${data.content}</i>`;
+          // [NEW] ステータス更新
+          assistantMsg.status = data.content;
           this.scrollToBottom();
         } else if (data.type === 'chunk') {
-          // 最初のチャンクが来たら、ステータス表示を消して回答追記モードへ
-          if (assistantMsg.text.startsWith('<i style="color:gray">')) {
-            assistantMsg.text = '';
-          }
+          // [NEW] 回答開始でステータス消去
+          assistantMsg.status = undefined;
           assistantMsg.text += data.content;
           this.scrollToBottom();
         } else if (data.type === 'complete') {
-          // 完了時のメタデータ更新
           assistantMsg.meta = data.meta;
           this.loading = false;
           this.selectedFiles = [];
@@ -208,22 +233,18 @@ export class App implements OnInit {
           this.scrollToBottom();
         }
       },
-      error: (err: unknown) => {
+      error: (err: Error) => {
         console.error(err);
-        this.error =
-          'バックエンドとの通信に失敗しました。FastAPI 側のターミナルのエラーも確認してみてください。';
+        this.showError(err.message || 'Communication failed');
         this.loading = false;
+        // エラー時はステータスを消してエラー表示
+        assistantMsg.status = undefined;
+        assistantMsg.text += '\n\n**Error:** ' + (err.message || 'Communication failed');
       }
     });
   }
 
-  // [LEARN] 履歴復元（データバインディング）
-  // サイドバーのログをクリックしたときに呼び出されます。
-  // 過去の会話データを messages 配列にセットすることで、Angularのデータバインディング機能により
-  // 自動的に画面上の表示が更新されます。これが「データ駆動」のUI構築です。
   restoreChat(log: any) {
-    // 既存のメッセージをクリアして、ログの内容で上書き
-    // 必要に応じて [...this.messages, ...] のように追記することも可能です
     this.messages = [
       { from: 'user', text: log.input_text },
       {

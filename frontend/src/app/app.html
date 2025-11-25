@@ -50,7 +50,7 @@
       <div class="view-container" *ngIf="viewMode === 'chat'"
         style="display: flex; flex-direction: column; height: 100%;">
 
-        <div class="chat-window" #chatWindow>
+        <div class="chat-window" #chatWindow style="overflow-y: auto; flex-grow: 1;">
           <mat-card *ngFor="let m of messages" class="message-card" [class.user-card]="m.from === 'user'"
             [class.assistant-card]="m.from === 'assistant'">
 
@@ -74,12 +74,25 @@
             <mat-card-content>
               <p *ngIf="m.from === 'user'" style="white-space: pre-wrap;">{{ m.text }}</p>
               <div *ngIf="m.from === 'assistant'">
+                <!-- Status Indicator -->
+                <div *ngIf="m.status" class="status-indicator">
+                  <mat-icon class="rotating-icon">sync</mat-icon>
+                  <span>{{ m.status }}</span>
+                </div>
+                <!-- Content -->
                 <markdown [data]="m.text"></markdown>
               </div>
             </mat-card-content>
           </mat-card>
 
-          <p *ngIf="error" class="error-text">{{ error }}</p>
+          <!-- Error & Retry Section -->
+          <div *ngIf="error" class="error-container">
+            <mat-icon color="warn">error_outline</mat-icon>
+            <span class="error-text">{{ error }}</span>
+            <button mat-stroked-button color="warn" (click)="send()">
+              <mat-icon>refresh</mat-icon> Retry
+            </button>
+          </div>
         </div>
 
         <section class="input-area">
@@ -93,7 +106,7 @@
           </mat-chip-set>
 
           <div class="input-row">
-            <button mat-icon-button (click)="fileInput.click()">
+            <button mat-icon-button (click)="fileInput.click()" matTooltip="Attach files">
               <mat-icon>attach_file</mat-icon>
             </button>
             <input #fileInput type="file" (change)="onFileSelected($event)" multiple style="display: none;">

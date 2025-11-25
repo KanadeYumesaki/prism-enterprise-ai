@@ -58,96 +58,112 @@ async def chat_endpoint(
     message: str = Form(...),
     files: List[UploadFile] = File(default=[])
 ):
-    start = time.time()
+    try:
+        start = time.time()
 
-    # [NEW CODE] 複数ファイルの処理
-    if files:
-        file_contents = []
-        for file in files:
-            if file.filename:
-                content = await extract_text_from_file(file)
-                file_contents.append(f"Filename: {file.filename}\nContent:\n{content}")
-        
-        if file_contents:
-            message += "\n\n[Attached Files]\n" + "\n---\n".join(file_contents)
+        # [NEW CODE] 複数ファイルの処理
+        if files:
+            file_contents = []
+            for file in files:
+                if file.filename:
+                    content = await extract_text_from_file(file)
+                    file_contents.append(f"Filename: {file.filename}\nContent:\n{content}")
+            
+            if file_contents:
+                message += "\n\n[Attached Files]\n" + "\n---\n".join(file_contents)
 
-    domain = detect_domain(message)
-    pii = detect_pii(message)
-    mode = decide_mode(message, POLICIES, domain, pii)
+        domain = detect_domain(message)
+        pii = detect_pii(message)
+        mode = decide_mode(message, POLICIES, domain, pii)
 
-    if files and mode == "FAST":
-         mode = "HEAVY"
+        if files and mode == "FAST":
+             mode = "HEAVY"
 
-    model = select_model(mode, POLICIES)
-    system_prompt = build_system_prompt(mode, POLICIES)
+        model = select_model(mode, POLICIES)
+        system_prompt = build_system_prompt(mode, POLICIES)
 
-    # [MOVED] RAG Context Injection logic is now inside stream_generator
+        # [MOVED] RAG Context Injection logic is now inside stream_generator
 
-    async def stream_generator():
-        nonlocal system_prompt # To modify the outer variable if needed, or just use a local one
-        
-        # 1. Status: Searching
-        yield json.dumps({"type": "status", "content": "🔍 Searching Knowledge Base..."}) + "\n"
+        async def stream_generator():
+            nonlocal system_prompt
+            full_reply = ""
+            
+            try:
+                # 1. Status: Searching
+                yield json.dumps({"type": "status", "content": "🔍 Searching Knowledge Base..."}) + "\n"
 
-        if RAG_ENGINE:
-            # Search for relevant documents in a thread pool
-            context_docs = await run_in_threadpool(RAG_ENGINE.search, message, n_results=3)
-            if context_docs:
-                context_str = "\n\n".join(context_docs)
-                # Update system prompt with context
-                # Note: system_prompt is a local variable in chat_endpoint, we can append to it
-                # But since strings are immutable, we need to update the variable used in call_llm_stream
-                # Let's use a local variable for the prompt to use
-                current_system_prompt = system_prompt + f"\n\n[Reference Information]\nUse the following information to answer the user's request if relevant:\n{context_str}\n"
-            else:
-                current_system_prompt = system_prompt
-        else:
-            current_system_prompt = system_prompt
+                if RAG_ENGINE:
+                    # Search for relevant documents in a thread pool
+                    context_docs = await run_in_threadpool(RAG_ENGINE.search, message, n_results=3)
+                    if context_docs:
+                        context_str = "\n\n".join(context_docs)
+                        current_system_prompt = system_prompt + f"\n\n[Reference Information]\nUse the following information to answer the user's request if relevant:\n{context_str}\n"
+                    else:
+                        current_system_prompt = system_prompt
+                else:
+                    current_system_prompt = system_prompt
 
-        # 2. Status: Generating
-        yield json.dumps({"type": "status", "content": "🤖 Generating Response..."}) + "\n"
+                # 2. Status: Generating
+                yield json.dumps({"type": "status", "content": "🤖 Generating Response..."}) + "\n"
 
-        full_reply = ""
-        # ストリーミング呼び出し
-        async for chunk in call_llm_stream(model, current_system_prompt, message):
-            full_reply += chunk
-            # NDJSON: {"type": "chunk", "content": "..."}
-            data = {"type": "chunk", "content": chunk}
-            yield json.dumps(data) + "\n"
+                # ストリーミング呼び出し
+                async for chunk in call_llm_stream(model, current_system_prompt, message):
+                    full_reply += chunk
+                    # NDJSON: {"type": "chunk", "content": "..."}
+                    data = {"type": "chunk", "content": chunk}
+                    yield json.dumps(data) + "\n"
 
-        total_ms = int((time.time() - start) * 1000)
+                total_ms = int((time.time() - start) * 1000)
 
-        # Log
-        insert_log(
-            timestamp=datetime.utcnow().isoformat() + "Z",
-            user_id=user_id,
-            mode=mode,
-            model=model,
-            policy_version=POLICIES.get("version", "0.0"),
-            pii_mask_applied=pii.get("pii_detected", False),
-            safety_flags={"detected_types": pii.get("detected_types", [])},
-            tools_used=[],
-            latency_ms=total_ms,
-            input_text=message,
-            output_text=full_reply
-        )
+                # Log (Async / Non-blocking)
+                # run_in_threadpool を使ってメインスレッドをブロックせずにDB保存を行う
+                await run_in_threadpool(
+                    insert_log,
+                    timestamp=datetime.utcnow().isoformat() + "Z",
+                    user_id=user_id,
+                    mode=mode,
+                    model=model,
+                    policy_version=POLICIES.get("version", "0.0"),
+                    pii_mask_applied=pii.get("pii_detected", False),
+                    safety_flags={"detected_types": pii.get("detected_types", [])},
+                    tools_used=[],
+                    latency_ms=total_ms,
+                    input_text=message,
+                    output_text=full_reply
+                )
 
-        # 完了通知とメタデータ
-        meta = {
-            "type": "complete",
-            "meta": {
-                "reply": full_reply, # 念のため全体も送る
-                "mode": mode,
-                "model": model,
-                "policy_version": POLICIES.get("version", "0.0"),
-                "safety_flags": ["pii"] if pii.get("pii_detected") else [],
-                "tools_used": [],
-                "latency_ms": total_ms
-            }
-        }
-        yield json.dumps(meta) + "\n"
+                # 完了通知とメタデータ
+                meta = {
+                    "type": "complete",
+                    "meta": {
+                        "reply": full_reply, # 念のため全体も送る
+                        "mode": mode,
+                        "model": model,
+                        "policy_version": POLICIES.get("version", "0.0"),
+                        "safety_flags": ["pii"] if pii.get("pii_detected") else [],
+                        "tools_used": [],
+                        "latency_ms": total_ms
+                    }
+                }
+                yield json.dumps(meta) + "\n"
 
-    return StreamingResponse(stream_generator(), media_type="application/x-ndjson")
+            except Exception as e:
+                # ストリーミング中のエラーハンドリング
+                error_data = {"type": "error", "content": f"An error occurred during generation: {str(e)}"}
+                yield json.dumps(error_data) + "\n"
+                # エラー時もログを残す（オプション）
+                print(f"Stream Error: {e}")
+
+        return StreamingResponse(stream_generator(), media_type="application/x-ndjson")
+
+    except Exception as e:
+        # エンドポイント初期化時のエラーハンドリング
+        print(f"Endpoint Error: {e}")
+        # ストリーミング開始前のエラーなので、通常のJSONレスポンスを返すか、
+        # クライアントがNDJSONを期待している場合はそれに合わせる
+        # ここでは簡易的にJSONエラーを返す
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 
 @app.get("/policies")

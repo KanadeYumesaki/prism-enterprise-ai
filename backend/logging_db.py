@@ -9,7 +9,13 @@ DB_PATH = Path(__file__).parent / "governance_logs.db"
 
 def init_db(db_path: str = None):
     p = DB_PATH if db_path is None else Path(db_path)
-    conn = sqlite3.connect(p)
+    # [REFAC] timeout=30.0 でロック待ち時間を延長
+    conn = sqlite3.connect(p, timeout=30.0)
+    
+    # [REFAC] WALモードを有効化して並行性を向上
+    conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute("PRAGMA synchronous=NORMAL;")
+    
     cur = conn.cursor()
     # [LEARN] 会話内容を保存するために input_text, output_text カラムを追加しました。
     # 既存のDBファイルがある場合、このスキーマ変更は反映されないため、
@@ -49,7 +55,7 @@ def insert_log(
     input_text: str,
     output_text: str
 ):
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
     cur = conn.cursor()
     cur.execute(
         """
@@ -78,7 +84,7 @@ def insert_log(
 
 
 def get_recent_logs(limit: int = 50) -> List[Dict[str, Any]]:
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
     conn.row_factory = sqlite3.Row # [LEARN] カラム名でアクセスできるようにします
     cur = conn.cursor()
     cur.execute("SELECT * FROM logs ORDER BY id DESC LIMIT ?", (limit,))
