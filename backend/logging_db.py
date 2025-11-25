@@ -1,109 +1,61 @@
-import sqlite3
+from sqlmodel import SQLModel, Session, create_engine, select
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Generator
 import json
-
+from models import Log, Tenant, User, TenantMember
 
 DB_PATH = Path(__file__).parent / "governance_logs.db"
+sqlite_url = f"sqlite:///{DB_PATH}"
 
+# check_same_thread=False is needed for SQLite with multiple threads (FastAPI)
+engine = create_engine(sqlite_url, connect_args={"check_same_thread": False})
 
-def init_db(db_path: str = None):
-    p = DB_PATH if db_path is None else Path(db_path)
-    # [REFAC] timeout=30.0 でロック待ち時間を延長
-    conn = sqlite3.connect(p, timeout=30.0)
+def init_db():
+    SQLModel.metadata.create_all(engine)
     
-    # [REFAC] WALモードを有効化して並行性を向上
-    conn.execute("PRAGMA journal_mode=WAL;")
-    conn.execute("PRAGMA synchronous=NORMAL;")
-    
-    cur = conn.cursor()
-    # [LEARN] 会話内容を保存するために input_text, output_text カラムを追加しました。
-    # 既存のDBファイルがある場合、このスキーマ変更は反映されないため、
-    # 開発中はDBファイルを削除して再生成することを推奨します。
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp TEXT,
-            user_id TEXT,
-            mode TEXT,
-            model TEXT,
-            policy_version TEXT,
-            pii_mask_applied INTEGER,
-            safety_flags TEXT,
-            tools_used TEXT,
-            latency_ms INTEGER,
-            input_text TEXT,
-            output_text TEXT
-        )
-        """
-    )
-    conn.commit()
-    conn.close()
+    # Seed Mock Data
+    with Session(engine) as session:
+        # Check if data exists
+        if not session.exec(select(Tenant)).first():
+            # Create Tenants
+            t1 = Tenant(id="tenant-a", name="Acme Corp")
+            t2 = Tenant(id="tenant-b", name="Beta Inc")
+            
+            # Create Users
+            u1 = User(id="user-1", display_name="Alice (Admin)")
+            u2 = User(id="user-2", display_name="Bob (User)")
+            
+            # Create Memberships
+            # Alice is Admin of Tenant A, User of Tenant B
+            m1 = TenantMember(tenant_id="tenant-a", user_id="user-1", role="admin")
+            m2 = TenantMember(tenant_id="tenant-b", user_id="user-1", role="user")
+            
+            # Bob is User of Tenant A
+            m3 = TenantMember(tenant_id="tenant-a", user_id="user-2", role="user")
+            
+            session.add(t1)
+            session.add(t2)
+            session.add(u1)
+            session.add(u2)
+            session.add(m1)
+            session.add(m2)
+            session.add(m3)
+            session.commit()
 
+def get_session() -> Generator[Session, None, None]:
+    with Session(engine) as session:
+        yield session
 
-def insert_log(
-    timestamp: str,
-    user_id: str,
-    mode: str,
-    model: str,
-    policy_version: str,
-    pii_mask_applied: bool,
-    safety_flags: Dict[str, Any],
-    tools_used: List[str],
-    latency_ms: int,
-    input_text: str,
-    output_text: str
-):
-    conn = sqlite3.connect(DB_PATH, timeout=30.0)
-    cur = conn.cursor()
-    cur.execute(
-        """
-        INSERT INTO logs (
-            timestamp, user_id, mode, model, policy_version,
-            pii_mask_applied, safety_flags, tools_used, latency_ms,
-            input_text, output_text
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            timestamp,
-            user_id,
-            mode,
-            model,
-            policy_version,
-            1 if pii_mask_applied else 0,
-            json.dumps(safety_flags or {}),
-            json.dumps(tools_used or []),
-            latency_ms,
-            input_text,
-            output_text,
-        ),
-    )
-    conn.commit()
-    conn.close()
+# Helper for legacy support or direct usage
+def insert_log_entry(log: Log):
+    with Session(engine) as session:
+        session.add(log)
+        session.commit()
+        session.refresh(log)
+    return log
 
-
-def get_recent_logs(limit: int = 50) -> List[Dict[str, Any]]:
-    conn = sqlite3.connect(DB_PATH, timeout=30.0)
-    conn.row_factory = sqlite3.Row # [LEARN] カラム名でアクセスできるようにします
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM logs ORDER BY id DESC LIMIT ?", (limit,))
-    rows = cur.fetchall()
-    conn.close()
-    result = []
-    for r in rows:
-        result.append({
-            "id": r["id"],
-            "timestamp": r["timestamp"],
-            "user_id": r["user_id"],
-            "mode": r["mode"],
-            "model": r["model"],
-            "policy_version": r["policy_version"],
-            "pii_mask_applied": bool(r["pii_mask_applied"]),
-            "safety_flags": json.loads(r["safety_flags"] or "{}"),
-            "tools_used": json.loads(r["tools_used"] or "[]"),
-            "latency_ms": r["latency_ms"],
-            "input_text": r["input_text"],
-            "output_text": r["output_text"],
-        })
-    return result
+def get_recent_logs_for_tenant(tenant_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+    with Session(engine) as session:
+        statement = select(Log).where(Log.tenant_id == tenant_id).order_by(Log.id.desc()).limit(limit)
+        results = session.exec(statement).all()
+        return [log.model_dump() for log in results]

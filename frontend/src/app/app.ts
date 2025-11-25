@@ -25,6 +25,8 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar'; // [NEW]
 import { MarkdownComponent } from 'ngx-markdown';
 
+import { LoginComponent } from './login.component';
+
 @Component({
   selector: 'app-root',
   standalone: true,
@@ -43,8 +45,9 @@ import { MarkdownComponent } from 'ngx-markdown';
     MatInputModule,
     MatProgressBarModule,
     MatTooltipModule,
-    MatSnackBarModule, // [NEW]
-    MarkdownComponent
+    MatSnackBarModule,
+    MarkdownComponent,
+    LoginComponent // [NEW]
   ],
   templateUrl: './app.html',
   styleUrl: './app.css',
@@ -52,6 +55,11 @@ import { MarkdownComponent } from 'ngx-markdown';
 export class App implements OnInit {
   @ViewChild('chatWindow') private chatWindow!: ElementRef;
   protected readonly title = signal('Prism');
+
+  // [NEW] Login State
+  isLoggedIn = false;
+  currentUser = '';
+  currentTenant = '';
 
   input = '';
   loading = false;
@@ -69,10 +77,30 @@ export class App implements OnInit {
   logs: any[] = [];
   policyVersion = 'Loading...';
 
-  constructor(private chat: ChatService, private snackBar: MatSnackBar) { } // [NEW] Inject SnackBar
+  constructor(private chat: ChatService, private snackBar: MatSnackBar) { }
 
   ngOnInit() {
+    // [REFAC] Wait for login
+  }
+
+  // [NEW] Login Handler
+  onLoginSuccess(event: { userId: string, tenantId: string }) {
+    this.isLoggedIn = true;
+    this.currentUser = event.userId;
+    this.currentTenant = event.tenantId;
     this.fetchSidebarData();
+  }
+
+  // [NEW] Logout
+  logout() {
+    this.chat.logout().subscribe(() => {
+      this.isLoggedIn = false;
+      this.currentUser = '';
+      this.currentTenant = '';
+      this.messages = [];
+      this.logs = [];
+      this.chat.setTenantId('');
+    });
   }
 
   fetchSidebarData() {

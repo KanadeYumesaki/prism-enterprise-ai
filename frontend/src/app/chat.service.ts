@@ -23,59 +23,50 @@ export interface ChatResponse {
   providedIn: 'root',
 })
 export class ChatService {
-  // FastAPI を 8000 番ポートで動かしている前提
   private baseUrl = 'http://localhost:8000';
+  private currentTenantId = '';
 
   constructor(private http: HttpClient) { }
 
-  sendMessage(message: string, userId = 'frontend-user', files: File[] = []): Observable<ChatResponse> {
-    /* [OLD] JSON送信
-       以前は単純なオブジェクトをJSONとして送っていました。
-       const body: ChatRequest = { message, user_id: userId };
-       return this.http.post<ChatResponse>(`${this.baseUrl}/chat`, body);
-    */
-
-    // [LEARN] ここでFormDataを使う理由は、テキストとバイナリファイル(画像やPDFなど)を
-    // 一度のHTTPリクエストでまとめて送信するためです。
-    // JSONはテキストデータの構造化には向いていますが、バイナリデータの扱いは苦手です。
-    const formData = new FormData();
-    formData.append('user_id', userId);
-    formData.append('message', message);
-
-    // [LEARN] 配列操作（複数ファイル）
-    // 複数のファイルを送信する場合、同じキー名（'files'）で何度も append します。
-    // バックエンド側（FastAPIなど）はこれをリストとして受け取ることができます。
-    if (files && files.length > 0) {
-      files.forEach(file => {
-        formData.append('files', file);
-      });
-    }
-
-    // [LEARN] HttpClient は FormData を渡すと、自動的に
-    // 'Content-Type': 'multipart/form-data; boundary=...'
-    // というヘッダーを設定してくれます。自分でヘッダーを設定する必要はありません。
-    // 'Content-Type': 'multipart/form-data; boundary=...'
-    // というヘッダーを設定してくれます。自分でヘッダーを設定する必要はありません。
-    return this.http.post<ChatResponse>(`${this.baseUrl}/chat`, formData);
+  setTenantId(tenantId: string) {
+    this.currentTenantId = tenantId;
   }
 
-  // [NEW CODE] ストリーミング対応 (Refactored for Production)
+  login(userId: string, tenantId: string) {
+    // [NEW] Mock Login
+    return this.http.post(`${this.baseUrl}/auth/mock-login`, { user_id: userId, tenant_id: tenantId }, { withCredentials: true });
+  }
+
+  logout() {
+    return this.http.post(`${this.baseUrl}/auth/logout`, {}, { withCredentials: true });
+  }
+
+  // [NEW] ストリーミング対応 (Refactored for Production)
   sendMessageStream(message: string, userId = 'frontend-user', files: File[] = []): Observable<any> {
+    if (!this.currentTenantId) {
+      return throwError(() => new Error('No tenant selected. Please login first.'));
+    }
+
     return new Observable<any>(observer => {
       const controller = new AbortController();
       const signal = controller.signal;
 
       const formData = new FormData();
+      // user_id is now inferred from cookie, but we might still send it for logging consistency if needed,
+      // but the backend uses the cookie context. We'll keep sending it just in case logic depends on it,
+      // but backend relies on cookie.
       formData.append('user_id', userId);
       formData.append('message', message);
       if (files && files.length > 0) {
         files.forEach(file => formData.append('files', file));
       }
 
-      fetch(`${this.baseUrl}/chat`, {
+      // [REFAC] Tenant-scoped URL & Credentials
+      fetch(`${this.baseUrl}/tenants/${this.currentTenantId}/chat`, {
         method: 'POST',
         body: formData,
-        signal
+        signal,
+        credentials: 'include' // [IMPORTANT] Send Cookies
       }).then(async response => {
         if (!response.ok) {
           const errorText = await response.text();
@@ -130,12 +121,9 @@ export class ChatService {
 
       return () => controller.abort();
     }).pipe(
-      // ネットワークエラーなどで即死した場合のリトライ
       retry({ count: 2, delay: 1000 }),
-      // 30秒間何もレスポンスがない場合はタイムアウト
       timeout(30000),
       catchError(err => {
-        // ユーザー向けのエラーメッセージに変換
         let userMessage = 'An unexpected error occurred.';
         if (err.name === 'TimeoutError') {
           userMessage = 'Connection timed out. The server is taking too long to respond.';
@@ -151,23 +139,25 @@ export class ChatService {
     );
   }
 
-  // [LEARN] HttpClient.get: サーバーからデータを取得するためのメソッド。
-  // ジェネリクス <any> を指定することで、レスポンスの型を定義できます（ここでは簡易的に any としています）。
   getLogs() {
-    return this.http.get<any[]>(`${this.baseUrl}/logs`);
+    if (!this.currentTenantId) return throwError(() => new Error('Not logged in'));
+    return this.http.get<any[]>(`${this.baseUrl}/tenants/${this.currentTenantId}/logs`, { withCredentials: true });
   }
 
   getPolicies() {
-    return this.http.get<any>(`${this.baseUrl}/policies`);
+    if (!this.currentTenantId) return throwError(() => new Error('Not logged in'));
+    return this.http.get<any>(`${this.baseUrl}/tenants/${this.currentTenantId}/policies`, { withCredentials: true });
   }
 
   getKnowledgeList() {
-    return this.http.get<any[]>(`${this.baseUrl}/knowledge`);
+    if (!this.currentTenantId) return throwError(() => new Error('Not logged in'));
+    return this.http.get<any[]>(`${this.baseUrl}/tenants/${this.currentTenantId}/knowledge`, { withCredentials: true });
   }
 
   ingestFile(file: File) {
+    if (!this.currentTenantId) return throwError(() => new Error('Not logged in'));
     const formData = new FormData();
     formData.append('file', file);
-    return this.http.post<any>(`${this.baseUrl}/ingest`, formData);
+    return this.http.post<any>(`${this.baseUrl}/tenants/${this.currentTenantId}/ingest`, formData, { withCredentials: true });
   }
 }

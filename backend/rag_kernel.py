@@ -38,30 +38,34 @@ class VectorStore:
     def __init__(self, persist_path: str = "./chroma_db"):
         # Initialize persistent client
         self.client = chromadb.PersistentClient(path=persist_path)
-        
-        # Get or create a collection. Collections are like tables in a relational DB.
-        self.collection = self.client.get_or_create_collection(name="governance_docs")
+    
+    def get_collection(self, tenant_id: str):
+        # [NEW] Tenant isolation: Create/Get collection per tenant
+        return self.client.get_or_create_collection(name=f"governance_docs_{tenant_id}")
 
-    def add_documents(self, documents: List[str], metadatas: List[Dict[str, Any]], ids: List[str], embeddings: List[List[float]]):
+    def add_documents(self, tenant_id: str, documents: List[str], metadatas: List[Dict[str, Any]], ids: List[str], embeddings: List[List[float]]):
         """Adds documents to the vector store."""
-        self.collection.add(
+        collection = self.get_collection(tenant_id)
+        collection.add(
             documents=documents,
             metadatas=metadatas,
             ids=ids,
             embeddings=embeddings
         )
 
-    def search_similarity(self, query_embedding: List[float], n_results: int = 5) -> Dict[str, Any]:
+    def search_similarity(self, tenant_id: str, query_embedding: List[float], n_results: int = 5) -> Dict[str, Any]:
         """Searches for similar documents using vector similarity."""
-        return self.collection.query(
+        collection = self.get_collection(tenant_id)
+        return collection.query(
             query_embeddings=[query_embedding],
             n_results=n_results
         )
 
-    def list_documents(self) -> List[Dict[str, Any]]:
+    def list_documents(self, tenant_id: str) -> List[Dict[str, Any]]:
         """Lists all documents in the collection."""
+        collection = self.get_collection(tenant_id)
         # ChromaDB's get() returns all items if no ids are specified
-        results = self.collection.get()
+        results = collection.get()
         
         docs = []
         if results['ids']:
@@ -84,29 +88,31 @@ class KeywordStore:
     def _init_db(self):
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        # Simple full-text search setup using a standard table
+        # [NEW] Added tenant_id to schema
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS keyword_docs (
-                id TEXT PRIMARY KEY,
+                id TEXT,
+                tenant_id TEXT,
                 content TEXT,
-                metadata TEXT
+                metadata TEXT,
+                PRIMARY KEY (id, tenant_id)
             )
         """)
         conn.commit()
         conn.close()
 
-    def add_documents(self, documents: List[str], metadatas: List[Dict[str, Any]], ids: List[str]):
+    def add_documents(self, tenant_id: str, documents: List[str], metadatas: List[Dict[str, Any]], ids: List[str]):
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         data = []
         for doc, meta, doc_id in zip(documents, metadatas, ids):
-            data.append((doc_id, doc, str(meta)))
+            data.append((doc_id, tenant_id, doc, str(meta)))
         
-        cursor.executemany("INSERT OR REPLACE INTO keyword_docs (id, content, metadata) VALUES (?, ?, ?)", data)
+        cursor.executemany("INSERT OR REPLACE INTO keyword_docs (id, tenant_id, content, metadata) VALUES (?, ?, ?, ?)", data)
         conn.commit()
         conn.close()
 
-    def search_keyword(self, query: str, n_results: int = 5) -> List[Dict[str, Any]]:
+    def search_keyword(self, tenant_id: str, query: str, n_results: int = 5) -> List[Dict[str, Any]]:
         """
         Performs a simple keyword search using SQL LIKE.
         For production, consider FTS5 (SQLite) or a dedicated search engine.
@@ -125,7 +131,9 @@ class KeywordStore:
         like_clauses = " OR ".join(["content LIKE ?" for _ in tokens])
         params = [f"%{token}%" for token in tokens]
         
-        sql = f"SELECT * FROM keyword_docs WHERE {like_clauses} LIMIT ?"
+        # [NEW] Filter by tenant_id
+        sql = f"SELECT * FROM keyword_docs WHERE tenant_id = ? AND ({like_clauses}) LIMIT ?"
+        params.insert(0, tenant_id)
         params.append(n_results)
         
         cursor.execute(sql, params)
@@ -147,7 +155,7 @@ class HybridRetriever:
         self.vector_store = VectorStore()
         self.keyword_store = KeywordStore()
 
-    def add_document(self, text: str, metadata: Dict[str, Any] = None):
+    def add_document(self, tenant_id: str, text: str, metadata: Dict[str, Any] = None):
         if metadata is None:
             metadata = {}
         
@@ -156,6 +164,7 @@ class HybridRetriever:
         
         # Add to Vector Store
         self.vector_store.add_documents(
+            tenant_id=tenant_id,
             documents=[text],
             metadatas=[metadata],
             ids=[doc_id],
@@ -164,23 +173,24 @@ class HybridRetriever:
         
         # Add to Keyword Store
         self.keyword_store.add_documents(
+            tenant_id=tenant_id,
             documents=[text],
             metadatas=[metadata],
             ids=[doc_id]
         )
         return doc_id
 
-    def search(self, query: str, n_results: int = 5) -> List[str]:
+    def search(self, tenant_id: str, query: str, n_results: int = 5) -> List[str]:
         # 1. Vector Search
         query_embedding = self.embedding_service.embed_text(query)
-        vector_results = self.vector_store.search_similarity(query_embedding, n_results)
+        vector_results = self.vector_store.search_similarity(tenant_id, query_embedding, n_results)
         
         # Extract documents from vector results
         # vector_results['documents'] is a list of lists (one list per query)
         v_docs = vector_results['documents'][0] if vector_results['documents'] else []
         
         # 2. Keyword Search
-        keyword_results = self.keyword_store.search_keyword(query, n_results)
+        keyword_results = self.keyword_store.search_keyword(tenant_id, query, n_results)
         k_docs = [r['document'] for r in keyword_results]
         
         # 3. Hybrid Fusion (Simple Union for now)
@@ -189,5 +199,5 @@ class HybridRetriever:
         
         return all_docs[:n_results]
 
-    def list_documents(self) -> List[Dict[str, Any]]:
-        return self.vector_store.list_documents()
+    def list_documents(self, tenant_id: str) -> List[Dict[str, Any]]:
+        return self.vector_store.list_documents(tenant_id)

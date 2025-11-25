@@ -18,6 +18,7 @@
 - **個別認証:** ユーザーごとのID管理により、セキュアなアクセス制御を実現。
 - **履歴の分離:** チャット履歴や監査ログはユーザーID（`user_id`）に紐づいて管理され、他者のデータと混在することはありません。
 - **パーソナライズ:** ユーザーごとの利用状況に応じたコンテキスト維持が可能。
+- **マルチテナント (Mock):** テナント間のデータと知識（RAG）を論理的に完全分離。
 
 ### 2. 🛡️ Governance & Dynamic Routing
 入力内容をリアルタイムで解析し、最適な「モード」へ自動ルーティングします。
@@ -43,14 +44,15 @@
 ## 🛠 Architecture
 
 Frontend (Angular) と Backend (FastAPI) によるモダンな疎結合アーキテクチャを採用しています。
+認証には HttpOnly Cookie を採用し、XSS対策を強化しています。
 
 ```mermaid
 graph TD
-    User["User / Browser"] -->|"HTTPS / Auth"| FE["Angular Frontend (Prism UI)"]
-    FE -->|"REST API / Bearer Token"| BE["FastAPI Backend"]
+    User["User / Browser"] -->|"HTTPS / Cookie Auth"| FE["Angular Frontend (Prism UI)"]
+    FE -->|"REST API / Session Cookie"| BE["FastAPI Backend"]
     
     subgraph "Governance Kernel (Backend)"
-        BE --> Auth["Auth Manager (User Session)"]
+        BE --> Auth["Auth Manager (Multi-tenant)"]
         BE --> Router["Mode Router"]
         BE --> PII["PII Shield"]
         Router -->|"Routing"| Model["LLM Orchestrator"]
@@ -67,9 +69,9 @@ graph TD
 
 ### Tech Stack
 
-  * **Frontend:** Angular 18+, Angular Material (Enterprise UI), Signals, ngx-markdown
-  * **Backend:** Python 3.11+, FastAPI (ASGI/Async), Pydantic
-  * **Auth:** Session / Token Based Authentication
+  * **Frontend:** Angular 20+, Angular Material (Enterprise UI), Signals, ngx-markdown
+  * **Backend:** Python 3.11+, FastAPI (ASGI/Async), SQLModel
+  * **Auth:** Mock Auth (Development) / Ready for OIDC (Production), HttpOnly Cookie
   * **AI Engine:** Google Gemini 2.5 Pro / Flash (Dynamic Model Routing)
   * **Data:** **ChromaDB** (Vector Search), **SQLite** (Audit Logs & Keyword Search)
 
@@ -93,92 +95,67 @@ graph TD
 
 -----
 
-## 📦 Installation
+## 📦 Installation & Quick Start
 
-この方法は、PythonやNode.jsの環境構築を一切スキップし、Prismを最も確実かつ迅速に起動できます。
+### 1\. Default Login Credentials (初期ログイン情報)
 
-### Prerequisites (必要なもの)
+本バージョン(v1.1.0)では、開発用として以下の **Mockアカウント** が初期設定されています。
+ログイン画面では以下の組み合わせを入力してください。
 
-  * **Docker Desktop** (または Docker Engine)
-  * Google Gemini API Key
-  * Git Clone済みのPrismプロジェクト一式
+| Role | Tenant ID | User ID | 権限 |
+| :--- | :--- | :--- | :--- |
+| **Admin** | `tenant-a` | `user-1` | **管理者** (全ログ閲覧可) |
+| User | `tenant-a` | `user-2` | 一般ユーザー (自分のログのみ) |
+| User | `tenant-b` | `user-1` | 別テナントの一般ユーザー |
 
------
-
-### 1\. 📂 依存関係の確認とDockerファイルの配置
-
-以下の3つのファイルがプロジェクトの**ルートディレクトリ**にあり、内容が最新であることを確認してください。
-
-  * `docker-compose.yml`
-  * `Dockerfile.backend`
-  * `Dockerfile.frontend`
-
-#### ⚠️ 重要：Backend 依存関係の修正
-
-エラーの再発を防ぐため、`backend/requirements.txt` に以下のライブラリが含まれていることを確認してください。
-
-```text
-# backend/requirements.txt (追記確認)
-pypdf            # PDFパース機能
-pydantic-settings # 環境変数処理
-python-multipart # 認証フォームデータ処理用
-passlib[bcrypt]  # パスワードハッシュ化 (認証用)
-python-jose      # JWTトークン生成 (認証用)
-```
+> [\!WARNING]
+> **Production Security Alert (商用利用時の注意)**
+>
+> 上記の `Mock Auth` および初期アカウントは、**開発・テスト専用**です。
+> 本番環境（Production）で運用する際は、必ず以下のセキュリティ対策を実施してください。
+>
+> 1.  **Switch to Real IdP:** `backend/auth.py` のモックロジックを無効化し、**Azure AD (Entra ID)**, **Auth0**, **Google Workspace** 等の OIDC/SAML 認証プロバイダに接続する実装へ差し替えてください。
+> 2.  **Disable Mock Login:** `/auth/mock-login` エンドポイントを削除または無効化してください。
+> 3.  **Rotate Keys:** `.env` 内の `SECRET_KEY` は、推測不可能な長く複雑な文字列に変更してください。
 
 -----
 
-### 2\. 🔑 環境設定ファイル (.env) の作成
+### 2\. Docker Launch (推奨)
 
-FastAPIコンテナにAPIキーを安全に渡すため、プロジェクトの**ルートディレクトリ**で設定ファイルを準備します。
+プロジェクトのルートディレクトリで以下のコマンドを実行します。
 
 ```bash
-# ルートディレクトリで実行
+# 1. 環境変数の設定
 cp .env.example .env
-```
+# .env を編集し、GEMINI_API_KEY を設定してください
 
-`**.env**` ファイルを開き、`GEMINI_API_KEY` を入力して保存してください。
-
-```text
-# .env ファイル (ルートディレクトリ)
-GEMINI_API_KEY="ここにあなたのGemini APIキーを記述します"
-SECRET_KEY="認証用のランダムな文字列を設定してください"
-```
-
------
-
-### 3\. ✨ Prismの起動 (One Command Launch)
-
-プロジェクトのルートディレクトリで、以下のコマンドを一度だけ実行します。フロントとバックエンドが同時にビルド・起動し、バックグラウンドで動作します。
-
-```bash
+# 2. 起動
 docker-compose up -d --build
 ```
 
-### 4\. アクセスと利用
+Access: `http://localhost`
 
-サーバーが立ち上がったら、ブラウザで以下のURLにアクセスしてください。
+### 3\. Manual Launch (開発用)
 
-  * Access `http://localhost` to launch Prism.
-  * ログイン画面が表示されます。初期ユーザー情報を入力してログインしてください。
+**Backend:**
 
-起動中のサービスを停止・削除する場合は、同じディレクトリで `docker-compose down` を実行してください。
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate  # Windows: .\.venv\Scripts\Activate
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8000
+```
 
------
+**Frontend:**
 
-## 📖 Usage Guide
+```bash
+cd frontend
+npm install
+ng serve
+```
 
-### 1\. ログインと知識の登録
-
-1.  ログイン画面でユーザー認証を行います。
-2.  サイドバーの **「Knowledge Base」** をクリック。
-3.  「Select Documents」から社内規定（PDF）やマニュアル（TXT）を選択し、**「Register to RAG」** をクリック。
-
-### 2\. ハイブリッド検索とチャット
-
-1.  「New Chat」に戻る。
-2.  質問を入力（例：「プロジェクトA77の経費上限は？」）。
-3.  Prismは **RAG（知識）** と **ガバナンス（モード判定）** を組み合わせ、最適なモデルで正確な回答をストリーミング生成します。
+Access: `http://localhost:4200`
 
 -----
 
@@ -197,13 +174,7 @@ modes:
 
 -----
 
-## 🛡 Security Note
-
-  * 本システムは **PII（個人識別情報）** の簡易検知機能を備えていますが、完全な保護を保証するものではありません。
-  * 実際の機密データを扱う際は、法人契約の API（Vertex AIなど）を利用し、インフラのセキュリティ設定を厳格に行ってください。
-
------
-
 ## 📝 License
 
 [MIT](https://www.google.com/search?q=LICENSE)
+

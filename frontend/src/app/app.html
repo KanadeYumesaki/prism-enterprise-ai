@@ -1,171 +1,170 @@
-<mat-sidenav-container class="sidenav-container">
+<ng-container *ngIf="isLoggedIn; else loginTpl">
+  <mat-sidenav-container class="sidenav-container">
+    <mat-sidenav #sidenav mode="side" opened class="sidenav">
+      <div class="sidenav-content">
+        <button mat-stroked-button class="new-chat-btn" (click)="clearChat()">
+          <mat-icon>add</mat-icon> New Chat
+        </button>
 
-  <mat-sidenav #drawer mode="side" opened class="sidenav">
-    <mat-toolbar>Menu</mat-toolbar>
+        <div class="policy-info">
+          Policy Version: <strong>{{ policyVersion }}</strong>
+          <br>
+          Tenant: <strong>{{ currentTenant }}</strong>
+        </div>
 
-    <div class="sidenav-content">
-      <button mat-stroked-button class="new-chat-btn" (click)="viewMode = 'chat'; clearChat()">
-        <mat-icon>add</mat-icon>
-        New Chat
-      </button>
+        <mat-nav-list>
+          <div mat-subheader>Recent Logs</div>
+          <mat-list-item *ngFor="let log of logs" (click)="restoreChat(log)"
+            style="cursor: pointer; height: auto; margin-bottom: 8px;">
+            <span matListItemTitle style="font-size: 13px; font-weight: 500;">
+              {{ log.input_text | slice:0:30 }}{{ log.input_text.length > 30 ? '...' : '' }}
+            </span>
+            <span matListItemLine style="font-size: 11px; color: gray;">
+              {{ log.timestamp | date:'short' }}
+            </span>
+            <span matListItemLine style="font-size: 10px;">
+              <span [style.color]="log.mode === 'SAFE' ? 'green' : (log.mode === 'HEAVY' ? 'purple' : 'orange')">
+                {{ log.mode }}
+              </span>
+              | {{ log.model }}
+            </span>
+          </mat-list-item>
+        </mat-nav-list>
 
-      <button mat-button class="nav-btn" (click)="setViewMode('knowledge')"
-        style="width:100%; justify-content:flex-start; margin-bottom:8px;">
-        <mat-icon>library_books</mat-icon>
-        Knowledge Base
-      </button>
-
-      <div class="policy-info" *ngIf="policyVersion">
-        <small>Policy: v{{ policyVersion }}</small>
+        <!-- Logout Button at bottom -->
+        <div style="margin-top: auto; padding-top: 16px; border-top: 1px solid rgba(0,0,0,0.12);">
+          <button mat-button color="warn" (click)="logout()" style="width: 100%;">
+            <mat-icon>logout</mat-icon> Logout
+          </button>
+        </div>
       </div>
+    </mat-sidenav>
 
-      <mat-divider></mat-divider>
+    <mat-sidenav-content>
+      <mat-toolbar color="primary" style="display: flex; justify-content: space-between;">
+        <div style="display: flex; align-items: center; gap: 16px;">
+          <span>{{ title() }}</span>
+          <button mat-button (click)="setViewMode('chat')" [disabled]="viewMode === 'chat'">Chat</button>
+          <button mat-button (click)="setViewMode('knowledge')" [disabled]="viewMode === 'knowledge'">Knowledge
+            Base</button>
+        </div>
+        <span style="font-size: 12px;">User: {{ currentUser }}</span>
+      </mat-toolbar>
 
-      <h3 mat-subheader>Audit Logs</h3>
-      <mat-nav-list>
-        <mat-list-item *ngFor="let log of logs" (click)="viewMode = 'chat'; restoreChat(log)" style="cursor: pointer;">
-          <mat-icon matListItemIcon>history</mat-icon>
-          <div matListItemTitle>{{ log.timestamp | date:'MM/dd HH:mm' }}</div>
-          <div matListItemLine>{{ log.mode }} - {{ log.model }}</div>
-        </mat-list-item>
-      </mat-nav-list>
-    </div>
-  </mat-sidenav>
+      <!-- Chat View -->
+      <div class="main-content" *ngIf="viewMode === 'chat'">
+        <div class="chat-window" #chatWindow>
+          <div *ngFor="let m of messages" class="message-card"
+            [ngClass]="{'user-card': m.from === 'user', 'assistant-card': m.from === 'assistant'}">
+            <mat-card>
+              <mat-card-content>
+                <markdown [data]="m.text"></markdown>
 
-  <mat-sidenav-content>
-
-    <mat-toolbar color="primary">
-      <mat-icon style="margin-right: 8px;">change_history</mat-icon>
-      <span style="font-weight: bold; font-size: 1.2rem;">{{ title() }}</span>
-      <span style="margin-left: 12px; font-size: 0.8rem; opacity: 0.8;">Intelligent Governance Hub</span>
-      <span class="spacer" style="flex: 1 1 auto;"></span>
-      <button mat-icon-button>
-        <mat-icon>account_circle</mat-icon>
-      </button>
-    </mat-toolbar>
-    <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
-
-    <main class="main-content">
-
-      <div class="view-container" *ngIf="viewMode === 'chat'"
-        style="display: flex; flex-direction: column; height: 100%;">
-
-        <div class="chat-window" #chatWindow style="overflow-y: auto; flex-grow: 1;">
-          <mat-card *ngFor="let m of messages" class="message-card" [class.user-card]="m.from === 'user'"
-            [class.assistant-card]="m.from === 'assistant'">
-
-            <mat-card-header>
-              <div mat-card-avatar>
-                <mat-icon>{{ m.from === 'user' ? 'person' : 'smart_toy' }}</mat-icon>
-              </div>
-              <mat-card-title>{{ m.from === 'user' ? 'You' : 'Prism' }}</mat-card-title>
-              <mat-card-subtitle *ngIf="m.meta">
-                <mat-chip-set>
-                  <mat-chip class="meta-chip" *ngIf="m.meta?.model">{{ m.meta?.model }}</mat-chip>
-                  <mat-chip class="meta-chip" *ngIf="m.meta?.mode"
-                    [style.background-color]="m.meta?.mode === 'HEAVY' ? '#ffcdd2' : '#e1f5fe'">
-                    {{ m.meta?.mode }}
-                  </mat-chip>
-                  <mat-chip class="meta-chip" *ngIf="m.meta?.latency_ms">{{ m.meta.latency_ms }}ms</mat-chip>
-                </mat-chip-set>
-              </mat-card-subtitle>
-            </mat-card-header>
-
-            <mat-card-content>
-              <p *ngIf="m.from === 'user'" style="white-space: pre-wrap;">{{ m.text }}</p>
-              <div *ngIf="m.from === 'assistant'">
                 <!-- Status Indicator -->
                 <div *ngIf="m.status" class="status-indicator">
                   <mat-icon class="rotating-icon">sync</mat-icon>
                   <span>{{ m.status }}</span>
                 </div>
-                <!-- Content -->
-                <markdown [data]="m.text"></markdown>
-              </div>
-            </mat-card-content>
-          </mat-card>
 
-          <!-- Error & Retry Section -->
+                <!-- Metadata Chips -->
+                <div *ngIf="m.meta" style="margin-top: 8px; display: flex; gap: 4px; flex-wrap: wrap;">
+                  <mat-chip-set>
+                    <mat-chip class="meta-chip" color="accent" highlighted>{{ m.meta.mode }}</mat-chip>
+                    <mat-chip class="meta-chip">{{ m.meta.model }}</mat-chip>
+                    <mat-chip class="meta-chip">{{ m.meta.latency_ms }}ms</mat-chip>
+                    <mat-chip *ngIf="m.meta.safety_flags && m.meta.safety_flags.length" color="warn" highlighted>PII
+                      Masked</mat-chip>
+                  </mat-chip-set>
+                </div>
+              </mat-card-content>
+            </mat-card>
+          </div>
+
+          <!-- Error Display -->
           <div *ngIf="error" class="error-container">
-            <mat-icon color="warn">error_outline</mat-icon>
+            <mat-icon>error_outline</mat-icon>
             <span class="error-text">{{ error }}</span>
-            <button mat-stroked-button color="warn" (click)="send()">
-              <mat-icon>refresh</mat-icon> Retry
-            </button>
           </div>
         </div>
 
-        <section class="input-area">
-          <mat-chip-set *ngIf="selectedFiles.length > 0" class="file-chips">
-            <mat-chip *ngFor="let file of selectedFiles" (removed)="removeFile(file)">
-              {{ file.name }}
-              <button matChipRemove>
-                <mat-icon>cancel</mat-icon>
-              </button>
-            </mat-chip>
-          </mat-chip-set>
-
-          <div class="input-row">
-            <button mat-icon-button (click)="fileInput.click()" matTooltip="Attach files">
-              <mat-icon>attach_file</mat-icon>
-            </button>
-            <input #fileInput type="file" (change)="onFileSelected($event)" multiple style="display: none;">
-
-            <mat-form-field appearance="outline" class="full-width">
-              <mat-label>Message...</mat-label>
-              <textarea matInput [(ngModel)]="input" rows="1" cdkTextareaAutosize (keydown.control.enter)="send()">
-              </textarea>
-              <button mat-icon-button matSuffix (click)="send()" [disabled]="loading || !input.trim()">
-                <mat-icon>send</mat-icon>
-              </button>
-            </mat-form-field>
-          </div>
-        </section>
-      </div>
-
-      <div class="view-container knowledge-view" *ngIf="viewMode === 'knowledge'"
-        style="padding: 24px; overflow-y: auto;">
-        <h2>Knowledge Base Management</h2>
-        <p style="color: rgba(0,0,0,0.6);">Upload documents (PDF, TXT, CSV) to RAG index for long-term memory.</p>
-
-        <div class="upload-zone"
-          style="border: 2px dashed #ccc; padding: 24px; border-radius: 8px; margin-bottom: 24px;">
-          <button mat-raised-button color="primary" (click)="kbFileInput.click()">
-            <mat-icon>upload_file</mat-icon> Select Documents
-          </button>
-          <input #kbFileInput type="file" multiple style="display:none" (change)="onFileSelected($event)">
-
-          <div *ngIf="selectedFiles.length > 0" style="margin-top: 16px;">
-            <h4 style="margin-bottom: 8px;">Selected for Upload:</h4>
+        <div class="input-area">
+          <div class="file-chips" *ngIf="selectedFiles.length > 0">
             <mat-chip-set>
-              <mat-chip *ngFor="let f of selectedFiles" (removed)="removeFile(f)">
-                {{ f.name }}
-                <button matChipRemove><mat-icon>cancel</mat-icon></button>
+              <mat-chip *ngFor="let file of selectedFiles" (removed)="removeFile(file)">
+                {{ file.name }}
+                <button matChipRemove>
+                  <mat-icon>cancel</mat-icon>
+                </button>
               </mat-chip>
             </mat-chip-set>
-            <div style="margin-top: 16px;">
-              <button mat-flat-button color="accent" (click)="uploadToKnowledgeBase()">
-                Register to RAG
-              </button>
-            </div>
+          </div>
+
+          <div class="input-row">
+            <button mat-icon-button (click)="fileInput.click()" matTooltip="Attach file">
+              <mat-icon>attach_file</mat-icon>
+            </button>
+            <input type="file" #fileInput style="display: none" (change)="onFileSelected($event)" multiple>
+
+            <mat-form-field appearance="outline" class="full-width" subscriptSizing="dynamic">
+              <textarea matInput [(ngModel)]="input" placeholder="Type a message..." [disabled]="loading"
+                (keydown.enter)="$event.preventDefault(); send()" rows="1" style="resize: none; overflow: hidden;"
+                oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'"></textarea>
+            </mat-form-field>
+
+            <button mat-fab color="primary" (click)="send()" [disabled]="!input.trim() || loading"
+              style="box-shadow: none;">
+              <mat-icon>send</mat-icon>
+            </button>
           </div>
         </div>
-
-        <mat-divider style="margin: 20px 0;"></mat-divider>
-
-        <h3>Registered Documents</h3>
-        <mat-list>
-          <mat-list-item *ngFor="let doc of knowledgeDocs">
-            <mat-icon matListItemIcon>description</mat-icon>
-            <div matListItemTitle>{{ doc.metadata?.filename || 'Unknown File' }}</div>
-            <div matListItemLine>ID: {{ doc.id }}</div>
-          </mat-list-item>
-          <p *ngIf="!knowledgeDocs || knowledgeDocs.length === 0" style="padding: 16px; color: gray;">
-            No documents registered yet.
-          </p>
-        </mat-list>
       </div>
 
-    </main>
-  </mat-sidenav-content>
-</mat-sidenav-container>
+      <!-- Knowledge Base View -->
+      <div class="main-content" *ngIf="viewMode === 'knowledge'" style="padding: 24px; overflow-y: auto;">
+        <h2>Knowledge Base Management</h2>
+        <p>Manage documents available for RAG retrieval in this tenant.</p>
+
+        <div
+          style="margin-bottom: 24px; padding: 16px; background: white; border-radius: 8px; border: 1px solid #e0e0e0;">
+          <h3>Upload New Documents</h3>
+          <div style="display: flex; gap: 16px; align-items: center;">
+            <button mat-stroked-button (click)="kbFileInput.click()">
+              <mat-icon>upload_file</mat-icon> Select Files
+            </button>
+            <input type="file" #kbFileInput style="display: none" (change)="onFileSelected($event)" multiple>
+
+            <div *ngIf="selectedFiles.length > 0">
+              <span *ngFor="let f of selectedFiles">{{ f.name }}, </span>
+            </div>
+
+            <button mat-raised-button color="primary" (click)="uploadToKnowledgeBase()"
+              [disabled]="selectedFiles.length === 0 || loading">
+              Upload
+            </button>
+          </div>
+          <mat-progress-bar *ngIf="loading" mode="indeterminate" style="margin-top: 16px;"></mat-progress-bar>
+        </div>
+
+        <table mat-table [dataSource]="knowledgeDocs" class="mat-elevation-z1" style="width: 100%;">
+          <ng-container matColumnDef="filename">
+            <th mat-header-cell *matHeaderCellDef> Filename </th>
+            <td mat-cell *matCellDef="let doc"> {{ doc.metadata.filename || 'Untitled' }} </td>
+          </ng-container>
+
+          <ng-container matColumnDef="id">
+            <th mat-header-cell *matHeaderCellDef> ID </th>
+            <td mat-cell *matCellDef="let doc"> {{ doc.id }} </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+        </table>
+      </div>
+
+    </mat-sidenav-content>
+  </mat-sidenav-container>
+</ng-container>
+
+<ng-template #loginTpl>
+  <app-login (loginSuccess)="onLoginSuccess($event)"></app-login>
+</ng-template>
