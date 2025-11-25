@@ -9,6 +9,10 @@ WORKDIR /app
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# [NEW] Download spacy Japanese NLP model for Presidio PII detection
+# This is done at build time (not runtime) to reduce startup latency
+RUN python -m spacy download ja_core_news_lg
+
 # ソースコードをコピー
 COPY backend/ .
 

@@ -170,3 +170,49 @@ mat-sidenav-content {
   flex: 1;
   font-weight: 500;
 }
+
+/* --- [NEW] Material Tabs Layout --- */
+/* Make tabs fill remaining height after toolbar */
+.full-height-tabs {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Ensure tab body wrapper fills available space */
+.full-height-tabs ::ng-deep .mat-mdc-tab-body-wrapper {
+  flex: 1;
+  height: 100%;
+}
+
+/* Tab content container */
+.tab-content {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background-color: #f5f5f5;
+  position: relative;
+}
+
+/* Chat window inside tab */
+.tab-content .chat-window {
+  flex: 1;
+  padding: 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  scroll-behavior: smooth;
+}
+
+/* Input area stays at bottom of tab */
+.tab-content .input-area {
+  background-color: white;
+  padding: 16px 24px;
+  border-top: 1px solid rgba(0, 0, 0, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 10;
+}

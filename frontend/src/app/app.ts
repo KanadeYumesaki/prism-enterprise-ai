@@ -23,6 +23,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar'; // [NEW]
+import { MatTabsModule } from '@angular/material/tabs'; // [NEW] Tabs for Chat/Knowledge switching
 import { MarkdownComponent } from 'ngx-markdown';
 
 import { LoginComponent } from './login.component';
@@ -46,6 +47,7 @@ import { LoginComponent } from './login.component';
     MatProgressBarModule,
     MatTooltipModule,
     MatSnackBarModule,
+    MatTabsModule, // [NEW]
     MarkdownComponent,
     LoginComponent // [NEW]
   ],
@@ -85,9 +87,11 @@ export class App implements OnInit {
 
   // [NEW] Login Handler
   onLoginSuccess(event: { userId: string, tenantId: string }) {
+    console.log('[App] onLoginSuccess called', event);
     this.isLoggedIn = true;
     this.currentUser = event.userId;
     this.currentTenant = event.tenantId;
+    console.log('[App] Login state updated, fetching sidebar data');
     this.fetchSidebarData();
   }
 

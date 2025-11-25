@@ -4,7 +4,21 @@ from typing import List, Dict, Any, Generator
 import json
 from models import Log, Tenant, User, TenantMember
 
-DB_PATH = Path(__file__).parent / "governance_logs.db"
+# ...
+# 変更前: ソースコードの横に作られる（コンテナ再作成で消える）
+# DB_PATH = Path(__file__).parent / "governance_logs.db"
+
+# 変更後: マウントされたボリューム(/app/data)の中に作る（消えない）
+# ※ ローカル開発時とDocker時でパスを切り替えるロジック
+import os
+
+if os.path.exists("/app/data"):
+    # Docker環境
+    DB_PATH = Path("/app/data/governance_logs.db")
+else:
+    # ローカル開発環境
+    DB_PATH = Path(__file__).parent / "governance_logs.db"
+
 sqlite_url = f"sqlite:///{DB_PATH}"
 
 # check_same_thread=False is needed for SQLite with multiple threads (FastAPI)

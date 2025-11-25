@@ -11,3 +11,7 @@ rank_bm25
 pydantic-settings
 pypdf
 pyjwt
+presidio-analyzer
+presidio-anonymizer
+spacy
+# ja_core_news_lg will be installed in Dockerfile

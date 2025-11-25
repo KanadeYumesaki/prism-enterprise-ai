@@ -80,15 +80,19 @@ export class LoginComponent {
   constructor(private chatService: ChatService) { }
 
   login() {
+    console.log('[LoginComponent] Login button clicked', { user: this.userId, tenant: this.tenantId });
     this.loading = true;
     this.error = '';
     this.chatService.login(this.userId, this.tenantId).subscribe({
-      next: () => {
+      next: (response) => {
+        console.log('[LoginComponent] Login successful', response);
         this.loading = false;
         this.chatService.setTenantId(this.tenantId);
+        console.log('[LoginComponent] Emitting loginSuccess event');
         this.loginSuccess.emit({ userId: this.userId, tenantId: this.tenantId });
       },
       error: (err) => {
+        console.error('[LoginComponent] Login failed', err);
         this.loading = false;
         this.error = 'Login failed. Please check your credentials.';
         console.error(err);

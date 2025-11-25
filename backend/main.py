@@ -30,7 +30,11 @@ app = FastAPI(title="Governance Kernel v0.1")
 # [REFAC] CORS Update for Cookie Auth
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:4200"], # Must be specific for allow_credentials=True
+    allow_origins=[
+        "http://localhost:4200", # Angular Dev Server (ng serve)
+        "http://localhost",      # Docker Nginx (Port 80) ★これを追加
+        "http://127.0.0.1"       # 念のため追加
+    ], # Must be specific for allow_credentials=True
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
