@@ -279,4 +279,4 @@ modes:
 
 ## 📝 License
 
-[MIT License]([https://openso](https://openso)
+[MIT License](https://opensource.org/licenses/MIT)
